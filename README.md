@@ -29,7 +29,7 @@ python manage.py test core        # 19 automated tests
 Production uses **MySQL** (`DB_ENGINE=mysql`; MariaDB also works). `sqlite` is for a quick local trial only.
 
 ## Deploying to a Linux server
-See **[deploy/DEPLOY.md](deploy/DEPLOY.md)** – one command installs Nginx + Gunicorn + MySQL,
+See **[deploy/DEPLOY.md](deploy/DEPLOY.md)** – one command installs Apache or Nginx + Gunicorn + MySQL,
 HTTPS, systemd services, nightly backups and maintenance:
 ```bash
 sudo DOMAIN=rhm.example.org LE_EMAIL=you@example.org bash deploy/install.sh

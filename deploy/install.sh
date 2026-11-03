@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # =============================================================================
 #  RHM Extractor – production installer (Ubuntu/Debian; RHEL/Rocky/Alma best-effort)
+#  Web server: Apache (auto-selected when present) or Nginx.
 #
 #  Usage (from the unpacked project folder, as root):
 #     sudo DOMAIN=rhm.example.org LE_EMAIL=admin@example.org bash deploy/install.sh
@@ -13,6 +14,7 @@
 #     DB_HOST DB_PORT DB_NAME DB_USER DB_PASSWORD   (required when DB_MODE=external)
 #     ADMIN_EMAIL ADMIN_PASSWORD DOWNLOAD_PASSWORD   (prompted if not given)
 #     APP_PORT          Gunicorn port on 127.0.0.1 (default 8001)
+#     WEB_SERVER        auto (default: Apache if already installed, else Nginx) | apache | nginx
 #
 #  Re-running is safe: existing secrets in /etc/rhm/rhm.env are kept.
 # =============================================================================
@@ -36,6 +38,7 @@ SSL_CERT="${SSL_CERT:-}"
 SSL_KEY="${SSL_KEY:-}"
 DB_MODE="${DB_MODE:-local}"
 APP_PORT="${APP_PORT:-8001}"
+WEB_SERVER="${WEB_SERVER:-auto}"
 
 c_info() { printf '\033[1;36m==> %s\033[0m\n' "$*"; }
 c_warn() { printf '\033[1;33m!!  %s\033[0m\n' "$*"; }
@@ -58,12 +61,26 @@ envget() { [ -f "$ENV_FILE" ] && grep -E "^$1=" "$ENV_FILE" | tail -1 | cut -d= 
 if command -v apt-get >/dev/null 2>&1; then
   PKG=apt
   NGINX_SITE=/etc/nginx/sites-available/rhm; NGINX_LINK=/etc/nginx/sites-enabled/rhm
+  APACHE_SVC=apache2; APACHE_ETC=/etc/apache2; APACHE_SITE=/etc/apache2/sites-available/rhm.conf
 elif command -v dnf >/dev/null 2>&1; then
   PKG=dnf
   NGINX_SITE=/etc/nginx/conf.d/rhm.conf; NGINX_LINK=""
+  APACHE_SVC=httpd; APACHE_ETC=/etc/httpd; APACHE_SITE=/etc/httpd/conf.d/rhm.conf
 else
   die "Unsupported distribution (need apt or dnf)."
 fi
+
+# ----------------------------------------------------------------- web server
+if [ "$WEB_SERVER" = auto ]; then
+  if command -v apache2 >/dev/null 2>&1 || command -v httpd >/dev/null 2>&1 \
+     || systemctl is-active --quiet "$APACHE_SVC" 2>/dev/null; then
+    WEB_SERVER=apache
+  else
+    WEB_SERVER=nginx
+  fi
+fi
+case "$WEB_SERVER" in apache|nginx) ;; *) die "WEB_SERVER must be apache or nginx." ;; esac
+c_info "Web server: $WEB_SERVER"
 
 # ----------------------------------------------------------------- TLS mode
 if [ -n "$SSL_CERT" ] && [ -n "$SSL_KEY" ]; then
@@ -83,16 +100,18 @@ if [ "$PKG" = apt ]; then
   export DEBIAN_FRONTEND=noninteractive
   apt-get update -q
   PKGS=(python3 python3-venv python3-dev build-essential pkg-config default-libmysqlclient-dev
-        nginx rsync curl ca-certificates default-mysql-client)
+        rsync curl ca-certificates default-mysql-client)
+  [ "$WEB_SERVER" = nginx ] && PKGS+=(nginx) || PKGS+=(apache2)
   [ "$DB_MODE" = local ] && PKGS+=(default-mysql-server)
-  [ "$TLS_MODE" = letsencrypt ] && PKGS+=(certbot python3-certbot-nginx)
+  [ "$TLS_MODE" = letsencrypt ] && PKGS+=(certbot "python3-certbot-$WEB_SERVER")
   apt-get install -y -q "${PKGS[@]}"
   PY=python3
 else
   dnf install -y -q epel-release || true
-  PKGS=(python3.11 python3.11-devel gcc pkgconf-pkg-config mysql-devel nginx rsync curl mysql)
+  PKGS=(python3.11 python3.11-devel gcc pkgconf-pkg-config mysql-devel rsync curl mysql)
+  [ "$WEB_SERVER" = nginx ] && PKGS+=(nginx) || PKGS+=(httpd mod_ssl)
   [ "$DB_MODE" = local ] && PKGS+=(mysql-server)
-  [ "$TLS_MODE" = letsencrypt ] && PKGS+=(certbot python3-certbot-nginx)
+  [ "$TLS_MODE" = letsencrypt ] && PKGS+=(certbot "python3-certbot-$WEB_SERVER")
   dnf install -y -q "${PKGS[@]}"
   PY=python3.11
 fi
@@ -251,46 +270,107 @@ systemctl enable --now rhm-gunicorn.service
 systemctl restart rhm-gunicorn.service
 systemctl enable --now rhm-backup.timer rhm-maintenance.timer
 
-# ----------------------------------------------------------------- nginx
-c_info "Configuring Nginx ($TLS_MODE)"
-install -d /etc/nginx/snippets
-install -m 0644 "$APP_DIR/deploy/nginx/rhm-proxy.conf" /etc/nginx/snippets/rhm-proxy.conf
-sed "s#__STATIC_ROOT__#$STATIC_DIR#g" "$APP_DIR/deploy/nginx/rhm-locations.conf" > /etc/nginx/snippets/rhm-locations.conf
-sed -i "s#127.0.0.1:8001#127.0.0.1:$APP_PORT#" /etc/nginx/snippets/rhm-proxy.conf
-install -m 0644 "$APP_DIR/deploy/nginx/rhm-ratelimit.conf" /etc/nginx/conf.d/rhm-ratelimit.conf
-SERVER_NAME="${DOMAIN:-_}"
-if [ "$TLS_MODE" = custom ]; then
-  sed -e "s#__SERVER_NAME__#$SERVER_NAME#g" -e "s#__SSL_CERT__#$SSL_CERT#g" -e "s#__SSL_KEY__#$SSL_KEY#g" \
-    "$APP_DIR/deploy/nginx/rhm-https.conf.template" > "$NGINX_SITE"
-elif [ "$TLS_MODE" = letsencrypt ] && grep -q "managed by Certbot" "$NGINX_SITE" 2>/dev/null; then
-  c_info "Keeping existing certbot-managed Nginx site"
-else
-  sed "s#__SERVER_NAME__#$SERVER_NAME#g" "$APP_DIR/deploy/nginx/rhm-http.conf.template" > "$NGINX_SITE"
-fi
-if [ ! -s /proc/net/if_inet6 ]; then
-  sed -i '/listen \[::\]/d' "$NGINX_SITE"   # host has IPv6 disabled
-fi
-if [ -n "$NGINX_LINK" ]; then
-  ln -sf "$NGINX_SITE" "$NGINX_LINK"
-  rm -f /etc/nginx/sites-enabled/default
-fi
+# ----------------------------------------------------------------- web server config
+port_owner() { ss -ltnpH "sport = :$1" 2>/dev/null | grep -oE 'users:\(\("[^"]+' | head -1 | cut -d'"' -f2; }
+
+setup_nginx() {
+  c_info "Configuring Nginx ($TLS_MODE)"
+  local owner; owner="$(port_owner 80)"
+  if [ -n "$owner" ] && [ "$owner" != nginx ]; then
+    die "Port 80 is already used by '$owner'. Re-run with WEB_SERVER=apache (if it is Apache) or stop '$owner' first."
+  fi
+  install -d /etc/nginx/snippets
+  install -m 0644 "$APP_DIR/deploy/nginx/rhm-proxy.conf" /etc/nginx/snippets/rhm-proxy.conf
+  sed "s#__STATIC_ROOT__#$STATIC_DIR#g" "$APP_DIR/deploy/nginx/rhm-locations.conf" > /etc/nginx/snippets/rhm-locations.conf
+  sed -i "s#127.0.0.1:8001#127.0.0.1:$APP_PORT#" /etc/nginx/snippets/rhm-proxy.conf
+  install -m 0644 "$APP_DIR/deploy/nginx/rhm-ratelimit.conf" /etc/nginx/conf.d/rhm-ratelimit.conf
+  local server_name="${DOMAIN:-_}"
+  if [ "$TLS_MODE" = custom ]; then
+    sed -e "s#__SERVER_NAME__#$server_name#g" -e "s#__SSL_CERT__#$SSL_CERT#g" -e "s#__SSL_KEY__#$SSL_KEY#g" \
+      "$APP_DIR/deploy/nginx/rhm-https.conf.template" > "$NGINX_SITE"
+  elif [ "$TLS_MODE" = letsencrypt ] && grep -q "managed by Certbot" "$NGINX_SITE" 2>/dev/null; then
+    c_info "Keeping existing certbot-managed Nginx site"
+  else
+    sed "s#__SERVER_NAME__#$server_name#g" "$APP_DIR/deploy/nginx/rhm-http.conf.template" > "$NGINX_SITE"
+  fi
+  if [ ! -s /proc/net/if_inet6 ]; then
+    sed -i '/listen \[::\]/d' "$NGINX_SITE"   # host has IPv6 disabled
+  fi
+  if [ -n "$NGINX_LINK" ]; then
+    ln -sf "$NGINX_SITE" "$NGINX_LINK"
+    rm -f /etc/nginx/sites-enabled/default
+  fi
+  nginx -t
+  systemctl enable --now nginx
+  systemctl reload nginx
+  if [ "$TLS_MODE" = letsencrypt ] && ! grep -q "managed by Certbot" "$NGINX_SITE"; then
+    c_info "Requesting Let's Encrypt certificate for $DOMAIN"
+    certbot --nginx -d "$DOMAIN" -m "$LE_EMAIL" --agree-tos --non-interactive --redirect
+    systemctl reload nginx
+  fi
+}
+
+setup_apache() {
+  c_info "Configuring Apache ($TLS_MODE)"
+  # Nginx may have been installed by an earlier run; it must not hold ports 80/443.
+  if systemctl is-enabled --quiet nginx 2>/dev/null || systemctl is-active --quiet nginx 2>/dev/null; then
+    c_warn "Disabling Nginx so Apache can use ports 80/443"
+    systemctl disable --now nginx || true
+  fi
+  local common="$APACHE_ETC/rhm-common.conf" name_line le_site
+  sed -e "s#__STATIC_ROOT__#$STATIC_DIR#g" -e "s#__APP_PORT__#$APP_PORT#g" \
+    "$APP_DIR/deploy/apache/rhm-common.conf" > "$common"
+  if [ -n "$DOMAIN" ]; then
+    name_line="ServerName $DOMAIN"
+  else
+    name_line="ServerName ${SERVER_IP:-localhost}"
+  fi
+  le_site="${APACHE_SITE%.conf}-le-ssl.conf"
+  if [ "$TLS_MODE" = custom ]; then
+    sed -e "s#__SERVER_NAME_LINE__#$name_line#g" -e "s#__COMMON__#$common#g" \
+        -e "s#__SSL_CERT__#$SSL_CERT#g" -e "s#__SSL_KEY__#$SSL_KEY#g" \
+      "$APP_DIR/deploy/apache/rhm-https.conf.template" > "$APACHE_SITE"
+  elif [ "$TLS_MODE" = letsencrypt ] && [ -f "$le_site" ]; then
+    c_info "Keeping existing certbot-managed Apache site"
+  else
+    sed -e "s#__SERVER_NAME_LINE__#$name_line#g" -e "s#__COMMON__#$common#g" \
+      "$APP_DIR/deploy/apache/rhm-http.conf.template" > "$APACHE_SITE"
+  fi
+
+  if [ "$PKG" = apt ]; then
+    a2enmod -q proxy proxy_http headers rewrite expires deflate >/dev/null
+    [ "$TLS_MODE" = custom ] && a2enmod -q ssl >/dev/null
+    install -m 0644 "$APP_DIR/deploy/apache/rhm-hardening.conf" /etc/apache2/conf-available/zz-rhm-hardening.conf
+    a2enconf -q zz-rhm-hardening >/dev/null
+    a2ensite -q rhm >/dev/null
+    if [ -z "$DOMAIN" ]; then
+      # IP-only access: our site must be the default virtual host.
+      c_warn "No DOMAIN given – disabling Apache's 000-default site so RHM answers on the server IP"
+      a2dissite -q 000-default >/dev/null 2>&1 || true
+    fi
+  else
+    sed -i 's#${APACHE_LOG_DIR}#logs#g' "$APACHE_SITE"
+    install -m 0644 "$APP_DIR/deploy/apache/rhm-hardening.conf" /etc/httpd/conf.d/zz-rhm-hardening.conf
+  fi
+  apachectl configtest
+  systemctl enable --now "$APACHE_SVC"
+  systemctl reload "$APACHE_SVC"
+  if [ "$TLS_MODE" = letsencrypt ] && [ ! -f "$le_site" ]; then
+    c_info "Requesting Let's Encrypt certificate for $DOMAIN"
+    certbot --apache -d "$DOMAIN" -m "$LE_EMAIL" --agree-tos --non-interactive --redirect
+    systemctl reload "$APACHE_SVC"
+  fi
+}
+
 if [ "$PKG" = dnf ] && command -v setsebool >/dev/null 2>&1; then
-  setsebool -P httpd_can_network_connect 1 || true   # allow nginx -> gunicorn on localhost
+  setsebool -P httpd_can_network_connect 1 || true   # allow the web server -> gunicorn on localhost
   chcon -R -t httpd_sys_content_t "$STATIC_DIR" 2>/dev/null || true
 fi
-nginx -t
-systemctl enable --now nginx
-systemctl reload nginx
-
-if [ "$TLS_MODE" = letsencrypt ] && ! grep -q "managed by Certbot" "$NGINX_SITE"; then
-  c_info "Requesting Let's Encrypt certificate for $DOMAIN"
-  certbot --nginx -d "$DOMAIN" -m "$LE_EMAIL" --agree-tos --non-interactive --redirect
-  systemctl reload nginx
-fi
+if [ "$WEB_SERVER" = apache ]; then setup_apache; else setup_nginx; fi
 
 # ----------------------------------------------------------------- firewall
 if command -v ufw >/dev/null 2>&1 && ufw status | grep -q "Status: active"; then
-  ufw allow 'Nginx Full' >/dev/null
+  ufw allow 80/tcp >/dev/null; ufw allow 443/tcp >/dev/null
 elif command -v firewall-cmd >/dev/null 2>&1 && firewall-cmd --state >/dev/null 2>&1; then
   firewall-cmd --permanent --add-service=http --add-service=https >/dev/null && firewall-cmd --reload >/dev/null
 fi
@@ -309,6 +389,7 @@ cat <<DONE
     URL:           $URL
     Config:        $ENV_FILE
     Code:          $APP_DIR      Data: $DATA_DIR
+    Web server:    $WEB_SERVER
     Logs:          journalctl -u rhm-gunicorn -f
     Manage:        sudo rhm-manage <command>     (e.g. createsuperuser)
     Update:        sudo bash deploy/update.sh    (from a newer unpacked release)

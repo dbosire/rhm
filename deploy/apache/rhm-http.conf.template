@@ -1,0 +1,7 @@
+# RHM Extractor – HTTP virtual host (certbot --apache adds the HTTPS copy + redirect)
+<VirtualHost *:80>
+    __SERVER_NAME_LINE__
+    Include __COMMON__
+    ErrorLog ${APACHE_LOG_DIR}/rhm_error.log
+    CustomLog ${APACHE_LOG_DIR}/rhm_access.log combined
+</VirtualHost>

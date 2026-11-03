@@ -1,10 +1,12 @@
 # Deploying RHM Extractor to a Linux server (MySQL)
 
 Target: **Ubuntu 22.04 / 24.04 or Debian 12** (RHEL/Rocky/Alma 9 supported best-effort).
-Stack: **Nginx → Gunicorn (systemd) → Django → MySQL**, with nightly backups.
+Stack: **Apache or Nginx → Gunicorn (systemd) → Django → MySQL**, with nightly backups.
+The installer uses **Apache automatically if it is already installed** on the server (e.g. hosting other
+sites); otherwise it installs Nginx. Force a choice with `WEB_SERVER=apache` or `WEB_SERVER=nginx`.
 
 ```
-Browser ──HTTPS──► Nginx :443 ──► Gunicorn 127.0.0.1:8001 ──► Django ──► MySQL (local or external)
+Browser ──HTTPS──► Apache/Nginx :443 ──► Gunicorn 127.0.0.1:8001 ──► Django ──► MySQL (local or external)
                    │ /static/ served directly          │
                    │ rate-limits sign-in & download    └─► /var/lib/rhm/private_media (templates, reports)
 ```
@@ -38,6 +40,13 @@ sudo DOMAIN=rhm.internal SSL_CERT=/etc/ssl/rhm/cert.pem SSL_KEY=/etc/ssl/rhm/key
 # C) Internal network, plain HTTP by IP (testing only)
 sudo bash deploy/install.sh
 ```
+To use Apache explicitly (recommended when Apache already serves other sites):
+```bash
+sudo WEB_SERVER=apache DOMAIN=rhm.example.org LE_EMAIL=you@example.org bash deploy/install.sh
+```
+With a `DOMAIN`, RHM is added as its own virtual host and your other Apache sites are left untouched.
+Without a domain (IP access) the installer disables Apache's `000-default` site so RHM answers on the IP.
+
 The script asks for the **first administrator's email and password** and the **Excel download password**.
 For unattended installs, add `ADMIN_EMAIL=… ADMIN_PASSWORD=… DOWNLOAD_PASSWORD=…`.
 
@@ -60,7 +69,7 @@ The external database must be `utf8mb4` and have **time-zone tables loaded**
 | MySQL | database `rhm_extractor` (utf8mb4), user `rhm`, time-zone tables |
 | Django | migrate, cache table, collectstatic, `check --deploy`, first admin + hashed download password |
 | systemd | `rhm-gunicorn.service` (hardened), `rhm-backup.timer` (02:15), `rhm-maintenance.timer` (03:30) |
-| Nginx | security headers + CSP, static caching, POST rate-limits on sign-in and downloads, 10 MB upload cap |
+| Web server | **Apache**: vhost in `/etc/apache2/sites-available/rhm.conf` + shared `/etc/apache2/rhm-common.conf` (mod_proxy, headers, rewrite, expires, deflate, ssl). **Nginx**: site + snippets with POST rate-limits on sign-in and downloads. Both: security headers + CSP, static caching, 10 MB upload cap, private paths blocked |
 | TLS | certbot (auto-renewing) or your certificate; HTTP → HTTPS redirect; HSTS |
 | Firewall | opens HTTP/HTTPS if `ufw`/`firewalld` is active |
 
@@ -85,7 +94,7 @@ It is **safe to re-run** – existing secrets, data and certbot config are kept.
 | Task | Command |
 |---|---|
 | Service status / restart | `systemctl status rhm-gunicorn` · `sudo systemctl restart rhm-gunicorn` |
-| Live logs | `journalctl -u rhm-gunicorn -f` · `/var/log/nginx/error.log` |
+| Live logs | `journalctl -u rhm-gunicorn -f` · Apache: `/var/log/apache2/rhm_error.log` · Nginx: `/var/log/nginx/error.log` |
 | Health check | `curl http://127.0.0.1:8001/healthz` |
 | Django commands | `sudo rhm-manage createsuperuser` · `sudo rhm-manage changepassword you@x.org` |
 | Backup now | `sudo systemctl start rhm-backup` → `/var/lib/rhm/backups/db_*.sql.gz`, `files_*.tar.gz` |
@@ -122,11 +131,18 @@ If you change Nginx rate-limit zones, use `sudo systemctl restart nginx` (a relo
 ## Troubleshooting
 | Symptom | Fix |
 |---|---|
-| 502 Bad Gateway | `journalctl -u rhm-gunicorn -n 100` – usually a typo in `rhm.env` or DB unreachable |
+| `nginx.service failed` during install | another web server (usually Apache) owns port 80 – re-run with `WEB_SERVER=apache` |
+| Apache shows its default page | your `DOMAIN` doesn't match the URL you opened, or (IP access) run `sudo a2dissite 000-default && sudo systemctl reload apache2` |
+| 502 / 503 from Apache or Nginx | `journalctl -u rhm-gunicorn -n 100` – usually a typo in `rhm.env` or DB unreachable |
 | 400 Bad Request | host not in `DJANGO_ALLOWED_HOSTS` in `rhm.env` |
 | 403 CSRF on sign-in | add your URL (with `https://`) to `DJANGO_CSRF_TRUSTED_ORIGINS` |
 | Cannot sign in over plain HTTP | `HTTPS_ENABLED=False` is required for HTTP-only installs (option C sets it) |
 | Dashboard chart empty / DB error on MySQL | load MySQL time-zone tables (see step 3) |
 | 429 Too Many Requests | sign-in/download rate limit hit – wait a minute |
 | `ERROR 1819 … password does not satisfy the current policy` | fixed in the installer (sets `validate_password.policy=LOW`, generates compliant passwords) – `git pull` and re-run |
-| RHEL: 502 with SELinux | `sudo setsebool -P httpd_can_network_connect 1` |
+| RHEL: 502/503 with SELinux | `sudo setsebool -P httpd_can_network_connect 1` |
+
+### Apache note
+Apache has no built-in equivalent of Nginx's request rate-limiting; the app itself still locks the
+Excel download after 5 wrong passwords. For sign-in brute-force protection on Apache, consider
+`fail2ban` or `libapache2-mod-evasive`.
