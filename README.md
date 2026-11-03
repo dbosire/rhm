@@ -71,9 +71,11 @@ New SMS wordings can be supported without code changes: **Settings → Custom pa
 (regex with one capture group per field, or a fixed Bank/Channel value).
 
 ### Excel output
+* **Submission Date** is exported as a date only in **MM/DD/YY** (a real Excel date, so it sorts and filters
+  correctly) and shown the same way in the app.
 * New workbook: exact order – User Email, Report Type, Item Name, Quantity, Unit Cost, Amount, Status,
   Reference, MPESA Receipt, Submission Date, Account Number, Bank, Channel; styled header, filters,
-  frozen header row, auto column widths, `#,##0.00` money and `dd/mm/yyyy hh:mm AM/PM` dates,
+  frozen header row, auto column widths, `#,##0.00` money and `mm/dd/yy` dates,
   optional total row. Reference / Receipt / Account are written as text.
 * Template: the original is never modified. Rows are appended after the last existing data row;
   a "Total" row is pushed down and ranges such as `=SUM(B2:B11)` are extended. Styles of the last

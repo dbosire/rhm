@@ -46,5 +46,8 @@ DEFAULT_STATUS_OPTIONS = [
 DEFAULT_REPORT_TYPES = ["Offering", "Tithe", "Missions", "Pledge", "Donation", "Thanksgiving", "Project", "Other"]
 
 DATE_DISPLAY_FORMAT = "%d/%m/%Y %I:%M %p"
-EXCEL_DATE_FORMAT = "dd/mm/yyyy hh:mm AM/PM"
+# Submission Date is shown and exported as a date only, MM/DD/YY.
+SUBMISSION_DATE_FORMAT = "%m/%d/%y"
+EXCEL_DATE_FORMAT = "mm/dd/yy"
+SUBMISSION_DATE_INPUT_FORMATS = ["%Y-%m-%d", "%m/%d/%y", "%m/%d/%Y"]
 EXCEL_MONEY_FORMAT = "#,##0.00"

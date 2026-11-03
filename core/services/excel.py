@@ -2,7 +2,7 @@
 import io
 import re
 from copy import copy
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
 from django.core.files.base import ContentFile
@@ -38,8 +38,8 @@ def excel_value(txn, key):
     v = getattr(txn, key)
     if v in (None, ""):
         return None
-    if key == "submission_date":
-        return timezone.localtime(v).replace(tzinfo=None) if timezone.is_aware(v) else v
+    if key == "submission_date":  # date only (MM/DD/YY), no time
+        return (timezone.localtime(v) if timezone.is_aware(v) else v).date()
     if key in MONEY_PARAMS or key == "quantity":
         return float(Decimal(v))
     return safe_text(v)
@@ -80,7 +80,7 @@ def build_new_workbook(transactions, sheet_name="Extracted Transactions", includ
             c.border = BORDER
             if row % 2 == 1:
                 c.fill = STRIPE_FILL
-            shown = val.strftime("%d/%m/%Y %I:%M %p") if isinstance(val, datetime) else (
+            shown = val.strftime("%m/%d/%y") if isinstance(val, (date, datetime)) else (
                 f"{val:,.2f}" if isinstance(val, float) else str(val or ""))
             widths[col - 1] = max(widths[col - 1], len(shown) + 2)
     last = row
@@ -300,7 +300,7 @@ def populate_template(file_field, sheet_name, header_row, data_start_row, mappin
             cell.value = excel_value(txn, key)
             if key in MONEY_PARAMS and cell.number_format in ("General", "@"):
                 cell.number_format = EXCEL_MONEY_FORMAT
-            elif key == "submission_date" and (cell.number_format == "General" or not cell.is_date):
+            elif key == "submission_date":
                 cell.number_format = EXCEL_DATE_FORMAT
             elif key in TEXT_PARAMS:
                 cell.number_format = "@"

@@ -31,7 +31,7 @@
       {% for t in page %}
       <tr class="{% if t.is_duplicate %}is-dup{% endif %} {% if t.error_count %}has-error{% endif %}">
         <td class="sel"><input type="checkbox" name="ids" value="{{ t.pk }}" data-row-select aria-label="Select"></td>
-        <td data-label="Date" class="nowrap">{{ t.submission_date|dtshow }}</td>
+        <td data-label="Date" class="nowrap">{{ t.submission_date|subdate }}</td>
         <td data-label="Source"><span class="badge {% if t.source == 'MPESA' %}mpesa{% elif t.source == 'KCB' %}kcb{% endif %}">{{ t.get_source_display }}</span></td>
         <td data-label="Reference">{{ t.reference|default:"—"|truncatechars:40 }}{% if t.item_name %}<div class="subtle">{{ t.item_name }}</div>{% endif %}</td>
         <td data-label="Receipt" class="mono">{{ t.mpesa_receipt|default:"—" }}</td>

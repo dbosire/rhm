@@ -50,7 +50,7 @@
         <td><input class="w-s" data-f="unit_cost" name="f-{{ t.pk }}-unit_cost" value="{{ t.unit_cost|num }}" inputmode="decimal"></td>
         <td><input class="w-l {% if 'reference' in bad %}flag{% endif %}" name="f-{{ t.pk }}-reference" value="{{ t.reference }}"></td>
         <td><input class="w-m mono" name="f-{{ t.pk }}-mpesa_receipt" value="{{ t.mpesa_receipt }}"></td>
-        <td><input type="datetime-local" class="{% if 'submission_date' in bad %}flag{% endif %}" name="f-{{ t.pk }}-submission_date" value="{{ t.submission_date|dtlocal }}"></td>
+        <td><input type="date" class="{% if 'submission_date' in bad %}flag{% endif %}" name="f-{{ t.pk }}-submission_date" value="{{ t.submission_date|dateinput }}" title="{{ t.submission_date|subdate }}"></td>
         <td><input class="w-m mono" name="f-{{ t.pk }}-account_number" value="{{ t.account_number }}"></td>
         <td><input class="w-s {% if 'bank' in bad %}flag{% endif %}" name="f-{{ t.pk }}-bank" value="{{ t.bank }}"></td>
         <td><input class="w-m {% if 'channel' in bad %}flag{% endif %}" name="f-{{ t.pk }}-channel" value="{{ t.channel }}"></td>

@@ -5,6 +5,30 @@ from django.contrib.auth import password_validation
 from .models import AppSetting, ExcelTemplate, Option, ParserRule, Transaction
 from .services.excel import clean_sheet_name
 
+def parse_submission_date(raw):
+    """Parse a date typed as YYYY-MM-DD (date picker) or MM/DD/YY(YY)."""
+    from datetime import datetime
+
+    from .constants import SUBMISSION_DATE_INPUT_FORMATS
+
+    for fmt in SUBMISSION_DATE_INPUT_FORMATS:
+        try:
+            return datetime.strptime((raw or "").strip(), fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
+def combine_date(d, previous=None):
+    """Aware datetime for date ``d``; keeps the time-of-day of ``previous`` (SMS time) if any."""
+    from datetime import datetime, time
+
+    from django.utils import timezone
+
+    t = timezone.localtime(previous).time() if previous else time(12, 0)
+    return timezone.make_aware(datetime.combine(d, t))
+
+
 SOURCE_CHOICES = [("AUTO", "Auto-detect"), ("MPESA", "M-Pesa"), ("KCB", "KCB")]
 IMAGE_ACCEPT = "image/png,image/jpeg,image/webp,image/bmp,image/gif,image/tiff"
 
@@ -39,11 +63,11 @@ class ExtractForm(forms.Form):
     quantity = forms.DecimalField(required=False, min_value=0, max_digits=12, decimal_places=2)
     unit_cost = forms.DecimalField(required=False, min_value=0, max_digits=14, decimal_places=2)
     status = forms.CharField(required=False, max_length=40)
-    submission_date = forms.DateTimeField(
+    submission_date = forms.DateField(
         required=False, label="Submission date override",
-        widget=forms.DateTimeInput(attrs={"type": "datetime-local"}),
-        input_formats=["%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M"],
-        help_text="Leave blank to use the SMS date (or now when the SMS has none).",
+        widget=forms.DateInput(attrs={"type": "date"}),
+        input_formats=["%Y-%m-%d", "%m/%d/%y", "%m/%d/%Y"],
+        help_text="Date only (shown as MM/DD/YY). Leave blank to use the SMS date, or today if the SMS has none.",
     )
 
     def clean_upload(self):
@@ -84,16 +108,30 @@ class TransactionForm(forms.ModelForm):
             "user_email", "report_type", "item_name", "quantity", "unit_cost", "amount", "status", "reference",
             "mpesa_receipt", "submission_date", "account_number", "bank", "channel",
         ]
-        widgets = {
-            "submission_date": forms.DateTimeInput(attrs={"type": "datetime-local"}, format="%Y-%m-%dT%H:%M"),
-        }
-
     def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["submission_date"].input_formats = ["%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M", "%d/%m/%Y %H:%M"]
+        initial_date = None
+        if self.instance and self.instance.submission_date:
+            from django.utils import timezone
+
+            initial_date = timezone.localtime(self.instance.submission_date).date()
+        self.fields["submission_date"] = forms.DateField(
+            required=False, label="Submission Date (MM/DD/YY)", initial=initial_date,
+            widget=forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
+            input_formats=["%Y-%m-%d", "%m/%d/%y", "%m/%d/%Y"],
+        )
+        if initial_date:
+            self.initial["submission_date"] = initial_date
         if user is not None and not user.is_admin_role:
             # Email always comes from the authenticated owner
             self.fields["user_email"].disabled = True
+
+    def clean_submission_date(self):
+        d = self.cleaned_data.get("submission_date")
+        if d is None:
+            return None
+        previous = self.instance.submission_date if self.instance and self.instance.pk else None
+        return combine_date(d, previous)
 
 
 class TemplateUploadForm(forms.ModelForm):

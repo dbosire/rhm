@@ -8,7 +8,7 @@ from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
-from core.forms import ExtractForm
+from core.forms import ExtractForm, combine_date
 from core.models import AppSetting, ExtractionBatch, SMSMessage, Transaction
 from core.parsing.extractor import normalize, split_messages
 from core.services import audit, ingest, ocr
@@ -58,7 +58,7 @@ def extract(request):
                     "quantity": str(cd["quantity"]) if cd.get("quantity") is not None else "",
                     "unit_cost": str(cd["unit_cost"]) if cd.get("unit_cost") is not None else "",
                     "status": cd.get("status") or setting.default_status,
-                    "submission_date": cd["submission_date"].isoformat() if cd.get("submission_date") else "",
+                    "submission_date": combine_date(cd["submission_date"]).isoformat() if cd.get("submission_date") else "",
                 }
                 batch = ingest.run_batch(
                     request.user, msgs, source_hint=cd["source"], defaults=defaults, method=method, filename=filename,

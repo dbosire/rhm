@@ -86,6 +86,26 @@ def dtlocal(value):
 
 
 @register.filter
+def subdate(value):
+    """Submission Date: date only, MM/DD/YY."""
+    if not value:
+        return "—"
+    from core.constants import SUBMISSION_DATE_FORMAT
+
+    if timezone.is_aware(value):
+        value = timezone.localtime(value)
+    return value.strftime(SUBMISSION_DATE_FORMAT)
+
+
+@register.filter
+def dateinput(value):
+    """Value for <input type=date>."""
+    if not value:
+        return ""
+    return timezone.localtime(value).strftime("%Y-%m-%d") if timezone.is_aware(value) else value.strftime("%Y-%m-%d")
+
+
+@register.filter
 def dtshow(value):
     if not value:
         return "—"

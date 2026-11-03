@@ -5,6 +5,7 @@ from django.core.files.base import ContentFile
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.urls import reverse
+from django.utils import timezone
 
 from accounts.models import User
 from core.models import AppSetting, AuditLog, ExcelTemplate, GeneratedReport, Transaction
@@ -235,3 +236,47 @@ class BatchMergeTests(TestCase):
         b3 = ingest.run_batch(self.admin, [KCB_DEBIT])
         r = self.client.post(reverse("core:batch_merge"), {"uids": [b1.uid, b3.uid]}, follow=True)
         self.assertContains(r, "Already merged")
+
+
+class SubmissionDateFormatTests(TestCase):
+    """Submission Date is a date only, formatted MM/DD/YY everywhere."""
+
+    def setUp(self):
+        self.user = User.objects.create_user("one@rhm.test", "S3cure-pass!")
+        self.client.force_login(self.user)
+        ingest.run_batch(self.user, [MPESA_PAYBILL])  # SMS date 2 Nov 2026 11:46
+        self.txn = Transaction.objects.get()
+
+    def test_new_workbook_date_only(self):
+        import datetime
+
+        ws = openpyxl.load_workbook(io.BytesIO(excel.build_new_workbook([self.txn]))).active
+        cell = ws["J2"]
+        self.assertEqual(ws["J1"].value, "Submission Date")
+        self.assertEqual(cell.value, datetime.datetime(2026, 11, 2, 0, 0))  # no time part
+        self.assertEqual(cell.number_format, "mm/dd/yy")
+
+    def test_template_date_only(self):
+        tpl = ExcelTemplate(name="T", owner=self.user, original_filename="t.xlsx")
+        tpl.file.save("t.xlsx", ContentFile(make_template_bytes()))
+        data, first = excel.populate_template(tpl.file, "Extracted Transactions", 1, 2, {"submission_date": "F"}, [self.txn])
+        cell = openpyxl.load_workbook(io.BytesIO(data)).active[f"F{first}"]
+        self.assertEqual(cell.number_format, "mm/dd/yy")
+        self.assertEqual((cell.value.hour, cell.value.minute), (0, 0))
+
+    def test_ui_shows_mm_dd_yy_and_edits_keep_time(self):
+        self.assertContains(self.client.get(reverse("core:transaction_list")), "11/02/26")
+        # grid edit with the date picker value
+        self.client.post(reverse("core:transaction_bulk"), {
+            "action": "save", "row_ids": [self.txn.pk], f"f-{self.txn.pk}-submission_date": "2026-11-05",
+        })
+        self.txn.refresh_from_db()
+        local = timezone.localtime(self.txn.submission_date)
+        self.assertEqual((local.month, local.day, local.year, local.hour, local.minute), (11, 5, 2026, 11, 46))
+        # typed MM/DD/YY in the record form
+        data = {f: getattr(self.txn, f) or "" for f in ["user_email", "report_type", "item_name", "status", "reference",
+                                                         "mpesa_receipt", "account_number", "bank", "channel"]}
+        data.update(amount="10000.00", submission_date="11/07/26")
+        self.client.post(reverse("core:transaction_detail", args=[self.txn.pk]), data)
+        self.txn.refresh_from_db()
+        self.assertEqual(timezone.localtime(self.txn.submission_date).strftime("%m/%d/%y"), "11/07/26")

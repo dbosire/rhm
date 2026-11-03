@@ -42,7 +42,7 @@
     <table class="tbl responsive">
       <thead><tr><th>Submission date</th><th>Reference</th><th>MPESA Receipt</th><th>Account</th><th class="num">Amount</th><th>Bank</th><th>Channel</th><th>Status</th></tr></thead>
       <tbody>{% for t in txns %}
-        <tr><td data-label="Date" class="nowrap">{{ t.submission_date|dtshow }}</td><td data-label="Reference"><a href="{% url 'core:transaction_detail' t.pk %}">{{ t.reference|default:"—"|truncatechars:40 }}</a></td><td data-label="Receipt" class="mono">{{ t.mpesa_receipt|default:"—" }}</td><td data-label="Account" class="mono">{{ t.account_number|default:"—" }}</td><td data-label="Amount" class="num">{{ t.amount|money }}</td><td data-label="Bank">{{ t.bank }}</td><td data-label="Channel">{{ t.channel }}</td><td data-label="Status">{{ t.status }}</td></tr>
+        <tr><td data-label="Date" class="nowrap">{{ t.submission_date|subdate }}</td><td data-label="Reference"><a href="{% url 'core:transaction_detail' t.pk %}">{{ t.reference|default:"—"|truncatechars:40 }}</a></td><td data-label="Receipt" class="mono">{{ t.mpesa_receipt|default:"—" }}</td><td data-label="Account" class="mono">{{ t.account_number|default:"—" }}</td><td data-label="Amount" class="num">{{ t.amount|money }}</td><td data-label="Bank">{{ t.bank }}</td><td data-label="Channel">{{ t.channel }}</td><td data-label="Status">{{ t.status }}</td></tr>
       {% empty %}<tr><td colspan="8" class="empty">Records have since been deleted.</td></tr>{% endfor %}</tbody>
     </table>
   </div>

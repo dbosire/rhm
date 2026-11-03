@@ -4,11 +4,10 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
-from django.utils.dateparse import parse_datetime
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
-from core.forms import TransactionForm
+from core.forms import TransactionForm, combine_date, parse_submission_date
 from core.models import Transaction
 from core.services import audit, validation
 from core.services.access import visible_transactions
@@ -86,11 +85,11 @@ def _parse_inline(txn, post):
             if raw == "":
                 setattr(txn, field, None)
                 continue
-            dt = parse_datetime(raw.replace("T", " ") + (":00" if len(raw) == 16 else ""))
-            if dt is None:
-                errors.append(f"#{txn.pk}: invalid submission date '{raw}'")
+            d = parse_submission_date(raw)
+            if d is None:
+                errors.append(f"#{txn.pk}: invalid submission date '{raw}' (use MM/DD/YY)")
             else:
-                setattr(txn, field, timezone.make_aware(dt) if timezone.is_naive(dt) else dt)
+                setattr(txn, field, combine_date(d, txn.submission_date))
         else:
             setattr(txn, field, raw[: MAX_LEN.get(field, 255)])
     if txn.amount is None and txn.calculated_amount is not None:
