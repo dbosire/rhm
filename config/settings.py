@@ -237,3 +237,9 @@ SERVER_EMAIL = env("SERVER_EMAIL", DEFAULT_FROM_EMAIL)
 
 # Nginx performs the HTTP->HTTPS redirect; HSTS preload is opt-in.
 SILENCED_SYSTEM_CHECKS = ["security.W008", "security.W021"]
+
+# OCR (image → SMS text). Leave TESSERACT_CMD empty to find `tesseract` on PATH.
+# Windows example: TESSERACT_CMD=C:\Program Files\Tesseract-OCR\tesseract.exe
+TESSERACT_CMD = env("TESSERACT_CMD", "")
+OCR_LANG = env("OCR_LANG", "eng")
+MAX_IMAGES_PER_UPLOAD = env("MAX_IMAGES_PER_UPLOAD", 20, int)

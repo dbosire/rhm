@@ -1,13 +1,17 @@
+import json
+
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.http import JsonResponse
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
 from core.forms import ExtractForm
 from core.models import AppSetting, ExtractionBatch, SMSMessage, Transaction
-from core.parsing.extractor import split_messages
-from core.services import audit, ingest
+from core.parsing.extractor import normalize, split_messages
+from core.services import audit, ingest, ocr
 from core.services.access import visible_batches
 
 from .common import option_lists, paginate
@@ -20,14 +24,34 @@ def extract(request):
         form = ExtractForm(request.POST, request.FILES)
         if form.is_valid():
             cd = form.cleaned_data
-            msgs, method, filename = [], ExtractionBatch.Method.PASTE, ""
+            msgs, methods, names = [], set(), []
             try:
                 if cd.get("sms_text", "").strip():
-                    msgs.extend(split_messages(cd["sms_text"]))
+                    # Messages that came from an on-page OCR preview keep their OCR warning.
+                    try:
+                        ocr_set = {normalize(t) for t in json.loads(cd.get("ocr_texts") or "[]") if isinstance(t, str)}
+                    except ValueError:
+                        ocr_set = set()
+                    for m in split_messages(cd["sms_text"]):
+                        msgs.append((m, [ocr.OCR_WARNING]) if normalize(m) in ocr_set else m)
+                    methods.add(ExtractionBatch.Method.IMAGE if ocr_set and all(
+                        normalize(m) in ocr_set for m in split_messages(cd["sms_text"])) else ExtractionBatch.Method.PASTE)
                 if cd.get("upload"):
-                    file_msgs, method = ingest.read_upload(cd["upload"])
-                    filename = cd["upload"].name
+                    file_msgs, file_method = ingest.read_upload(cd["upload"])
+                    names.append(cd["upload"].name)
+                    methods.add(file_method)
                     msgs.extend(file_msgs)
+                if cd.get("images"):
+                    img_msgs, img_errors = ingest.read_images(cd["images"])
+                    for e in img_errors:
+                        messages.warning(request, e)
+                    if not img_msgs and not msgs:
+                        raise ingest.IngestError("No SMS text could be read from the image(s).")
+                    names.extend(f.name for f in cd["images"])
+                    methods.add(ExtractionBatch.Method.IMAGE)
+                    msgs.extend(img_msgs)
+                method = methods.pop() if len(methods) == 1 else ExtractionBatch.Method.MIXED
+                filename = ", ".join(names)
                 defaults = {
                     "report_type": cd.get("report_type") or "",
                     "item_name": cd.get("item_name") or "",
@@ -53,7 +77,41 @@ def extract(request):
                 return redirect("core:batch_detail", uid=batch.uid)
     else:
         form = ExtractForm(initial={"status": setting.default_status, "report_type": setting.default_report_type})
-    return render(request, "core/extract.html", {"form": form, **option_lists()})
+    ocr_ok, ocr_reason = ocr.availability()
+    return render(request, "core/extract.html", {
+        "form": form, "ocr_available": ocr_ok, "ocr_reason": ocr_reason, **option_lists(),
+    })
+
+
+@login_required
+@require_POST
+def ocr_preview(request):
+    """Read SMS text from pasted/uploaded images and return it for review (nothing is stored)."""
+    ok, reason = ocr.availability()
+    if not ok:
+        return JsonResponse({"ok": False, "error": f"Image extraction is not available: {reason}"}, status=503)
+    files = request.FILES.getlist("images")
+    if not files:
+        return JsonResponse({"ok": False, "error": "No image received."}, status=400)
+    if len(files) > settings.MAX_IMAGES_PER_UPLOAD:
+        return JsonResponse({"ok": False, "error": f"At most {settings.MAX_IMAGES_PER_UPLOAD} images at a time."}, status=400)
+    results = []
+    for f in files:
+        item = {"name": f.name[:120]}
+        if not ocr.is_image_name(f.name) and not (f.content_type or "").startswith("image/"):
+            item["error"] = "Not a supported image type."
+        elif f.size > settings.MAX_UPLOAD_MB * 1024 * 1024:
+            item["error"] = f"Larger than {settings.MAX_UPLOAD_MB} MB."
+        else:
+            try:
+                text = ocr.ocr_image(f.read())
+                found = split_messages(text)
+                item.update(text="\n\n".join(found), messages=found, count=len(found))
+            except ocr.OCRError as exc:
+                item["error"] = str(exc)
+        results.append(item)
+    audit.log(request, "ocr.preview", None, images=len(files), messages=sum(r.get("count", 0) for r in results))
+    return JsonResponse({"ok": True, "results": results})
 
 
 @login_required

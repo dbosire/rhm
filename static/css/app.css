@@ -412,3 +412,14 @@ details.sms summary::-webkit-details-marker { display: none; }
 .w-100 { width: 100%; }
 .filters .row { flex-wrap: nowrap; }
 html { background: var(--bg-1); }
+
+/* OCR image list */
+kbd { font-family: var(--mono); font-size: .78em; padding: 1px 6px; border-radius: 6px; border: 1px solid var(--input-border); background: var(--glass-strong); }
+.ocr-list { list-style: none; padding: 0; margin: 12px 0 0; display: grid; gap: 8px; }
+.ocr-list li { display: flex; gap: 12px; align-items: center; padding: 8px 10px; border-radius: 12px; background: var(--glass-soft); border: 1px solid var(--line); }
+.ocr-list img { width: 46px; height: 46px; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); flex-shrink: 0; }
+.ocr-list .grow { flex: 1; min-width: 0; }
+.ocr-list .grow b { display: block; font-size: .86rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ocr-list .spinner { width: 18px; height: 18px; margin: 0; border-width: 2px; }
+textarea.ocr-flash { animation: ocrFlash 1.2s var(--ease); }
+@keyframes ocrFlash { 0% { box-shadow: 0 0 0 4px rgba(16,185,129,.45); } 100% { box-shadow: none; } }

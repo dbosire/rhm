@@ -61,7 +61,7 @@ The external database must be `utf8mb4` and have **time-zone tables loaded**
 ### What the installer does
 | Step | Result |
 |---|---|
-| Packages | Python venv, build tools, MySQL client libs, Nginx, (MySQL server), (certbot) |
+| Packages | Python venv, build tools, MySQL client libs, Tesseract OCR (for SMS screenshots), Apache/Nginx, (MySQL server), (certbot) |
 | User | system user `rhm` (no login shell) |
 | Code | `/opt/rhm/app` (read-only to the app), venv `/opt/rhm/venv`, static `/opt/rhm/static` |
 | Data | `/var/lib/rhm/private_media` (templates/reports, mode 700), `/var/lib/rhm/backups` |
@@ -69,7 +69,7 @@ The external database must be `utf8mb4` and have **time-zone tables loaded**
 | MySQL | database `rhm_extractor` (utf8mb4), user `rhm`, time-zone tables |
 | Django | migrate, cache table, collectstatic, `check --deploy`, first admin + hashed download password |
 | systemd | `rhm-gunicorn.service` (hardened), `rhm-backup.timer` (02:15), `rhm-maintenance.timer` (03:30) |
-| Web server | **Apache**: vhost in `/etc/apache2/sites-available/rhm.conf` + shared `/etc/apache2/rhm-common.conf` (mod_proxy, headers, rewrite, expires, deflate, ssl). **Nginx**: site + snippets with POST rate-limits on sign-in and downloads. Both: security headers + CSP, static caching, 10 MB upload cap, private paths blocked |
+| Web server | **Apache**: vhost in `/etc/apache2/sites-available/rhm.conf` + shared `/etc/apache2/rhm-common.conf` (mod_proxy, headers, rewrite, expires, deflate, ssl). **Nginx**: site + snippets with POST rate-limits on sign-in and downloads. Both: security headers + CSP, static caching, 25 MB request cap, private paths blocked |
 | TLS | certbot (auto-renewing) or your certificate; HTTP → HTTPS redirect; HSTS |
 | Firewall | opens HTTP/HTTPS if `ufw`/`firewalld` is active |
 
@@ -138,6 +138,7 @@ If you change Nginx rate-limit zones, use `sudo systemctl restart nginx` (a relo
 | 403 CSRF on sign-in | add your URL (with `https://`) to `DJANGO_CSRF_TRUSTED_ORIGINS` |
 | Cannot sign in over plain HTTP | `HTTPS_ENABLED=False` is required for HTTP-only installs (option C sets it) |
 | Dashboard chart empty / DB error on MySQL | load MySQL time-zone tables (see step 3) |
+| “Image extraction is not available” | `sudo apt install tesseract-ocr tesseract-ocr-eng && sudo systemctl restart rhm-gunicorn` |
 | 429 Too Many Requests | sign-in/download rate limit hit – wait a minute |
 | `ERROR 1819 … password does not satisfy the current policy` | fixed in the installer (sets `validate_password.policy=LOW`, generates compliant passwords) – `git pull` and re-run |
 | RHEL: 502/503 with SELinux | `sudo setsebool -P httpd_can_network_connect 1` |

@@ -105,6 +105,7 @@
   /* ---------------- dropzone ---------------- */
   $$(".dropzone").forEach((dz) => {
     const input = $("input[type=file]", dz), label = $(".dz-file", dz);
+    if (!label) return; // image drop zone is handled by the OCR code below
     const show = () => { label.textContent = input.files.length ? input.files[0].name : ""; };
     input.addEventListener("change", show);
     ["dragenter", "dragover"].forEach((ev) => dz.addEventListener(ev, (e) => { e.preventDefault(); dz.classList.add("drag"); }));
@@ -126,6 +127,74 @@
     };
     smsBox.addEventListener("input", count);
     count();
+  }
+
+  /* ---------------- SMS screenshots → text (OCR) ---------------- */
+  const imgInput = $("#id_images");
+  if (imgInput) {
+    const url = imgInput.dataset.ocrUrl, list = $("#ocr-list"), drop = $("#img-drop");
+    const hidden = $("#id_ocr_texts"), box = $("#id_sms_text");
+    let ocrTexts = [];
+    try { ocrTexts = JSON.parse(hidden.value || "[]"); } catch (e) { ocrTexts = []; }
+    const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+    const isImage = (f) => f && /^image\//.test(f.type || "") || /\.(png|jpe?g|webp|bmp|gif|tiff?)$/i.test(f.name || "");
+
+    function addText(messages) {
+      const current = box.value.trim();
+      box.value = (current ? current + "\n\n" : "") + messages.join("\n\n");
+      ocrTexts = ocrTexts.concat(messages);
+      hidden.value = JSON.stringify(ocrTexts);
+      box.dispatchEvent(new Event("input"));
+      box.classList.remove("ocr-flash"); void box.offsetWidth; box.classList.add("ocr-flash");
+    }
+
+    async function readImage(file) {
+      const li = document.createElement("li");
+      li.innerHTML = '<img alt=""><div class="grow"><b></b><span class="subtle">Reading text…</span></div><span class="spinner"></span>';
+      li.querySelector("b").textContent = file.name || "Pasted image";
+      list.appendChild(li);
+      const reader = new FileReader();
+      reader.onload = () => { li.querySelector("img").src = reader.result; };
+      reader.readAsDataURL(file);
+      const status = li.querySelector(".subtle"), spin = li.querySelector(".spinner");
+      try {
+        const body = new FormData();
+        body.append("images", file, file.name || "pasted.png");
+        const resp = await fetch(url, { method: "POST", body, credentials: "same-origin", headers: { "X-CSRFToken": getCookie("csrftoken") } });
+        let data = {};
+        try { data = await resp.json(); } catch (e) {}
+        const r = (data.results || [])[0] || {};
+        if (!resp.ok || data.ok === false || r.error) {
+          status.innerHTML = '<span class="badge bad">' + esc(r.error || data.error || "Could not read image") + "</span>";
+        } else if (!r.count) {
+          status.innerHTML = '<span class="badge warn">No SMS text found</span>';
+        } else {
+          addText(r.messages);
+          status.innerHTML = '<span class="badge ok">' + r.count + " message" + (r.count === 1 ? "" : "s") + " added – please check receipt codes</span>";
+        }
+      } catch (e) {
+        status.innerHTML = '<span class="badge bad">Network error</span>';
+      } finally { spin.remove(); }
+    }
+    async function readAll(files) {
+      for (const f of Array.from(files).filter(isImage)) await readImage(f);
+    }
+
+    imgInput.addEventListener("change", async () => {
+      const files = Array.from(imgInput.files);
+      await readAll(files);
+      imgInput.value = ""; // already read – don't upload again on submit
+    });
+    ["dragenter", "dragover"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("drag"); }));
+    ["dragleave", "drop"].forEach((ev) => drop.addEventListener(ev, () => drop.classList.remove("drag")));
+    drop.addEventListener("drop", (e) => { e.preventDefault(); readAll(e.dataTransfer.files); });
+    document.addEventListener("paste", (e) => {
+      const items = Array.from((e.clipboardData || {}).items || []);
+      const imgs = items.filter((i) => i.kind === "file" && /^image\//.test(i.type)).map((i) => i.getAsFile()).filter(Boolean);
+      if (!imgs.length) return;              // normal text paste
+      e.preventDefault();
+      readAll(imgs);
+    });
   }
 
   /* ---------------- secure download modal ---------------- */

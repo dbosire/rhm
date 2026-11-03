@@ -64,7 +64,7 @@
             <a class="btn btn-sm" href="{% url 'core:transaction_detail' t.pk %}?next={{ request.get_full_path|urlencode }}" title="Open record">{% icon 'edit' 14 %}</a>
           </div>
           {% if t.issues %}<ul class="issues">{% for i in t.issues %}{% if i.level != 'info' %}<li class="{{ i.level }}">• {{ i.message }}</li>{% endif %}{% endfor %}</ul>{% endif %}
-          {% if t.sms %}<details class="sms"><summary>Original SMS</summary><div class="sms-text">{{ t.sms.raw_text }}</div></details>{% endif %}
+          {% if t.sms %}<details class="sms"><summary>Original SMS{% if t.sms.from_image %} (read from image){% endif %}</summary><div class="sms-text">{{ t.sms.raw_text }}</div></details>{% endif %}
         </td>
       </tr>
       {% endwith %}

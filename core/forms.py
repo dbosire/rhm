@@ -6,6 +6,23 @@ from .models import AppSetting, ExcelTemplate, Option, ParserRule, Transaction
 from .services.excel import clean_sheet_name
 
 SOURCE_CHOICES = [("AUTO", "Auto-detect"), ("MPESA", "M-Pesa"), ("KCB", "KCB")]
+IMAGE_ACCEPT = "image/png,image/jpeg,image/webp,image/bmp,image/gif,image/tiff"
+
+
+class MultipleFileInput(forms.ClearableFileInput):
+    allow_multiple_selected = True
+
+
+class MultipleFileField(forms.FileField):
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault("widget", MultipleFileInput(attrs={"accept": IMAGE_ACCEPT}))
+        super().__init__(*args, **kwargs)
+
+    def clean(self, data, initial=None):
+        single = super().clean
+        if isinstance(data, (list, tuple)):
+            return [single(d, initial) for d in data if d]
+        return [single(data, initial)] if data else []
 
 
 class ExtractForm(forms.Form):
@@ -14,6 +31,8 @@ class ExtractForm(forms.Form):
         widget=forms.Textarea(attrs={"rows": 9, "placeholder": "Paste one or many M-Pesa / KCB messages here.\nSeparate messages with a blank line or put each on its own line."}),
     )
     upload = forms.FileField(required=False, label="…or upload a file (.txt, .csv, .xlsx)")
+    images = MultipleFileField(required=False, label="…or SMS screenshots / photos")
+    ocr_texts = forms.CharField(required=False, widget=forms.HiddenInput)  # set by the page after an OCR preview
     source = forms.ChoiceField(choices=SOURCE_CHOICES, initial="AUTO", label="Institution")
     report_type = forms.CharField(required=False, max_length=80)
     item_name = forms.CharField(required=False, max_length=200)
@@ -30,16 +49,31 @@ class ExtractForm(forms.Form):
     def clean_upload(self):
         f = self.cleaned_data.get("upload")
         if f:
-            if not f.name.lower().endswith((".txt", ".csv", ".xlsx")):
-                raise forms.ValidationError("Only .txt, .csv and .xlsx files are supported.")
+            from .services.ocr import is_image_name
+
+            if not f.name.lower().endswith((".txt", ".csv", ".xlsx")) and not is_image_name(f.name):
+                raise forms.ValidationError("Supported: .txt, .csv, .xlsx or an image (PNG, JPG, WEBP…).")
             if f.size > settings.MAX_UPLOAD_MB * 1024 * 1024:
                 raise forms.ValidationError(f"File exceeds {settings.MAX_UPLOAD_MB} MB.")
         return f
 
+    def clean_images(self):
+        from .services.ocr import is_image_name
+
+        files = self.cleaned_data.get("images") or []
+        if len(files) > settings.MAX_IMAGES_PER_UPLOAD:
+            raise forms.ValidationError(f"At most {settings.MAX_IMAGES_PER_UPLOAD} images per upload.")
+        for f in files:
+            if not is_image_name(f.name):
+                raise forms.ValidationError(f"{f.name} is not a supported image type.")
+            if f.size > settings.MAX_UPLOAD_MB * 1024 * 1024:
+                raise forms.ValidationError(f"{f.name} exceeds {settings.MAX_UPLOAD_MB} MB.")
+        return files
+
     def clean(self):
         cleaned = super().clean()
-        if not cleaned.get("sms_text", "").strip() and not cleaned.get("upload"):
-            raise forms.ValidationError("Paste at least one SMS or upload a file.")
+        if not cleaned.get("sms_text", "").strip() and not cleaned.get("upload") and not cleaned.get("images"):
+            raise forms.ValidationError("Paste at least one SMS, upload a file or add a screenshot.")
         return cleaned
 
 

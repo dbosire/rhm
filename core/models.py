@@ -139,6 +139,8 @@ class ExtractionBatch(TimeStamped):
         TXT = "txt", "TXT file"
         CSV = "csv", "CSV file"
         XLSX = "xlsx", "Excel file"
+        IMAGE = "image", "Image (OCR)"
+        MIXED = "mixed", "Text + images"
         MERGED = "merged", "Merged batches"
 
     class State(models.TextChoices):
@@ -220,6 +222,7 @@ class SMSMessage(TimeStamped):
     error = models.TextField(blank=True)
     attempts = models.PositiveSmallIntegerField(default=1)
     position = models.PositiveIntegerField(default=0)
+    from_image = models.BooleanField(default=False, help_text="Text was read from an image with OCR")
 
     class Meta:
         ordering = ["batch", "position"]

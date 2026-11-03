@@ -59,9 +59,13 @@ def validate(txn: Transaction, extraction_warnings=None) -> list:
     return issues
 
 
+_OCR_FOLD = str.maketrans({"O": "0", "I": "1", "L": "1"})
+
+
 def duplicate_key(txn: Transaction) -> str:
     if txn.mpesa_receipt:
-        basis = f"R|{txn.mpesa_receipt.strip().upper()}"
+        # Fold characters OCR commonly confuses so a screenshot copy matches the original SMS.
+        basis = f"R|{txn.mpesa_receipt.strip().upper().translate(_OCR_FOLD)}"
     else:
         when = timezone.localtime(txn.transaction_date or txn.submission_date).strftime("%Y%m%d%H%M") if (
             txn.transaction_date or txn.submission_date) else ""

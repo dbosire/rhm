@@ -12,6 +12,7 @@ from core.models import ExtractionBatch, ParserRule, SMSMessage, Transaction
 from core.parsing.extractor import extract, normalize, split_messages, to_decimal
 
 from . import validation
+from . import ocr
 from .excel_safety import UnsafeWorkbook, open_safe_workbook
 
 MESSAGE_HEADERS = {"message", "messages", "sms", "body", "text", "content", "msg", "sms text", "sms body", "details"}
@@ -59,8 +60,16 @@ def _cells_to_messages(rows):
 
 
 def read_upload(upload):
-    """Return (messages, method) from an uploaded file. Validates type and size."""
+    """Return (messages, method) from an uploaded file. Validates type and size.
+
+    Image files are read with OCR; their messages are returned as (text, [warning]) tuples.
+    """
     name = (upload.name or "").lower()
+    if ocr.is_image_name(name):
+        msgs, errors = read_images([upload])
+        if not msgs:
+            raise IngestError(" ".join(errors) or "No SMS text found in the image.")
+        return msgs, ExtractionBatch.Method.IMAGE
     max_bytes = settings.MAX_UPLOAD_MB * 1024 * 1024
     if upload.size > max_bytes:
         raise IngestError(f"File is larger than {settings.MAX_UPLOAD_MB} MB.")
@@ -87,6 +96,24 @@ def read_upload(upload):
             wb.close()
         return _cells_to_messages(rows), ExtractionBatch.Method.XLSX
     raise IngestError("Unsupported file type. Upload a .txt, .csv or .xlsx file.")
+
+
+def read_images(files):
+    """OCR uploaded images → (list of (message, [OCR warning]), list of per-file errors)."""
+    if len(files) > settings.MAX_IMAGES_PER_UPLOAD:
+        raise IngestError(f"Too many images – the limit is {settings.MAX_IMAGES_PER_UPLOAD} per upload.")
+    out, errors = [], []
+    for f in files:
+        try:
+            text = ocr.ocr_image(f.read())
+        except ocr.OCRError as exc:
+            errors.append(f"{f.name}: {exc}")
+            continue
+        found = split_messages(text)
+        if not found:
+            errors.append(f"{f.name}: no SMS text found.")
+        out.extend((m, [ocr.OCR_WARNING]) for m in found)
+    return out, errors
 
 
 # ------------------------------------------------------------------ batch processing
@@ -136,9 +163,11 @@ def _active_rules():
     return list(ParserRule.objects.filter(is_active=True))
 
 
-def process_message(batch, user, text, position, source_hint, defaults, rules):
+def process_message(batch, user, text, position, source_hint, defaults, rules, extra_warnings=None):
     clean = normalize(text)
     result = extract(clean, source_hint, rules)
+    if extra_warnings and result.recognized:
+        result.warnings.extend(extra_warnings)
     sms = SMSMessage.objects.create(
         batch=batch, created_by=user, raw_text=text.strip(), position=position,
         text_hash=hashlib.sha256(clean.encode()).hexdigest(),
@@ -148,6 +177,7 @@ def process_message(batch, user, text, position, source_hint, defaults, rules):
             SMSMessage.ParseStatus.UNRECOGNIZED if not result.errors or "Unrecognized" in result.errors[0]
             else SMSMessage.ParseStatus.FAILED),
         error="; ".join(result.errors),
+        from_image=bool(extra_warnings and ocr.OCR_WARNING in extra_warnings),
     )
     if not result.recognized:
         return sms, None
@@ -174,8 +204,9 @@ def run_batch(user, messages, *, source_hint="AUTO", defaults=None, method="past
         batch = ExtractionBatch.objects.create(
             created_by=user, input_method=method, source_hint=source_hint, filename=filename[:255], defaults=defaults,
         )
-        for pos, text in enumerate(messages, start=1):
-            process_message(batch, user, text, pos, source_hint, defaults, rules)
+        for pos, item in enumerate(messages, start=1):
+            text, extra = (item, None) if isinstance(item, str) else item
+            process_message(batch, user, text, pos, source_hint, defaults, rules, extra)
         batch.refresh_counts()
     return batch
 
@@ -186,6 +217,8 @@ def retry_message(sms: SMSMessage, user, *, new_text=None, source_hint=None):
     text = new_text if new_text is not None else sms.raw_text
     hint = source_hint or sms.selected_source
     result = extract(normalize(text), hint, rules)
+    if sms.from_image and result.recognized:
+        result.warnings.append(ocr.OCR_WARNING)
     sms.raw_text = text.strip()
     sms.text_hash = hashlib.sha256(normalize(text).encode()).hexdigest()
     sms.selected_source = hint

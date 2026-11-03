@@ -100,7 +100,7 @@ if [ "$PKG" = apt ]; then
   export DEBIAN_FRONTEND=noninteractive
   apt-get update -q
   PKGS=(python3 python3-venv python3-dev build-essential pkg-config default-libmysqlclient-dev
-        rsync curl ca-certificates default-mysql-client)
+        rsync curl ca-certificates default-mysql-client tesseract-ocr tesseract-ocr-eng)
   [ "$WEB_SERVER" = nginx ] && PKGS+=(nginx) || PKGS+=(apache2)
   [ "$DB_MODE" = local ] && PKGS+=(default-mysql-server)
   [ "$TLS_MODE" = letsencrypt ] && PKGS+=(certbot "python3-certbot-$WEB_SERVER")
@@ -108,7 +108,7 @@ if [ "$PKG" = apt ]; then
   PY=python3
 else
   dnf install -y -q epel-release || true
-  PKGS=(python3.11 python3.11-devel gcc pkgconf-pkg-config mysql-devel rsync curl mysql)
+  PKGS=(python3.11 python3.11-devel gcc pkgconf-pkg-config mysql-devel rsync curl mysql tesseract tesseract-langpack-eng)
   [ "$WEB_SERVER" = nginx ] && PKGS+=(nginx) || PKGS+=(httpd mod_ssl)
   [ "$DB_MODE" = local ] && PKGS+=(mysql-server)
   [ "$TLS_MODE" = letsencrypt ] && PKGS+=(certbot "python3-certbot-$WEB_SERVER")

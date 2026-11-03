@@ -3,4 +3,6 @@ openpyxl>=3.1
 defusedxml>=0.7          # hardened XML parsing for uploaded workbooks (used automatically by openpyxl)
 python-dotenv>=1.0
 whitenoise>=6.6
+Pillow>=10.1             # image handling for SMS screenshots
+pytesseract>=0.3.10      # OCR – also needs the Tesseract program (see README)
 mysqlclient>=2.2         # MySQL / MariaDB driver (Linux needs: default-libmysqlclient-dev pkg-config)

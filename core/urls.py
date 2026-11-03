@@ -9,6 +9,7 @@ urlpatterns = [
     path("healthz", dashboard.healthz, name="healthz"),
     # extraction
     path("extract/", extraction.extract, name="extract"),
+    path("extract/ocr/", extraction.ocr_preview, name="ocr_preview"),
     path("batches/", extraction.batch_list, name="batch_list"),
     path("batches/merge/", extraction.batch_merge, name="batch_merge"),
     path("batches/<uuid:uid>/", extraction.batch_detail, name="batch_detail"),

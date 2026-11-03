@@ -39,11 +39,24 @@ sudo DOMAIN=rhm.example.org LE_EMAIL=you@example.org bash deploy/install.sh
 
 | Step | Where |
 |---|---|
-| Paste SMS (single or bulk) or upload TXT / CSV / XLSX, choose Auto / M-Pesa / KCB, set defaults (Report Type, Item, Qty, Unit Cost, Status, optional Submission Date) | **Extract SMS** |
+| Paste SMS (single or bulk), upload TXT / CSV / XLSX, **or paste/drop SMS screenshots** (text is read with OCR and shown for checking first), choose Auto / M-Pesa / KCB, set defaults (Report Type, Item, Qty, Unit Cost, Status, optional Submission Date) | **Extract SMS** |
 | Review the batch grid: edit any cell, see warnings (missing values, Amount ≠ Qty × Unit Cost, duplicates), retry failed messages with corrected text/institution | **Batches → Review** |
 | Tick several batches → **Merge** (or **Merge & generate Excel**) to combine them into one batch and one report; originals are archived under “Merged” | **Batches** |
 | Select records → **Generate Excel**: new 13-column workbook, or populate a template using a saved/auto column mapping | **Generate Excel** |
 | Download behind the predefined password (server-verified, rate-limited, audited) | **Report History** |
+
+### Screenshots / photos (OCR)
+On **Extract SMS** you can press **Ctrl+V** to paste a screenshot, drag images onto the page or pick
+several at once. The server reads the text locally with **Tesseract** (nothing is sent to outside
+services and images are not stored), cleans chat-app noise (headers, timestamps, line wraps, dark
+mode) and adds the messages to the text box so you can correct them before extracting. Records from
+images carry a warning to double-check the receipt code (OCR can confuse O/0 and I/1); duplicate
+detection treats those characters as equal.
+
+* Linux server: installed automatically by `deploy/install.sh` (`tesseract-ocr`).
+* Windows PC: install Tesseract from https://github.com/UB-Mannheim/tesseract/wiki and add
+  `TESSERACT_CMD=C:\Program Files\Tesseract-OCR\tesseract.exe` to `.env`.
+  Without it, the page shows that image extraction is unavailable; everything else works.
 
 ### Your `mpesav3.py`
 `core/parsing/mpesav3_legacy.py` loads `parse_mpesa_message()` straight from

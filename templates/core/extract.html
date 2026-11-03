@@ -35,6 +35,22 @@
         {{ form.upload }}
       </div>
       {{ form.upload.errors }}
+
+      <div class="card-head" style="margin-top:22px"><h2>{% icon 'image' %} From screenshots / photos</h2>
+        {% if ocr_available %}<span class="badge ok">OCR ready</span>{% else %}<span class="badge muted">Unavailable</span>{% endif %}</div>
+      {% if ocr_available %}
+      <div class="dropzone" id="img-drop">
+        <div class="dz-ico">{% icon 'image' 22 %}</div>
+        <b>Drop SMS screenshots here, click to choose, or press <kbd>Ctrl</kbd>+<kbd>V</kbd> to paste one</b>
+        <div class="subtle">PNG, JPG, WEBP… up to {{ MAX_UPLOAD_MB }} MB each. Text is read on the server and added to the box above for you to check before extracting – images are not stored.</div>
+        <input type="file" name="images" id="id_images" multiple accept="image/png,image/jpeg,image/webp,image/bmp,image/gif,image/tiff" data-ocr-url="{% url 'core:ocr_preview' %}">
+      </div>
+      {{ form.images.errors }}
+      <ul class="ocr-list" id="ocr-list" aria-live="polite"></ul>
+      <input type="hidden" name="ocr_texts" id="id_ocr_texts" value="{{ form.ocr_texts.value|default:'' }}">
+      {% else %}
+      <div class="alert warn">{% icon 'alert' %}<div>Reading text from images isn’t available on this server: {{ ocr_reason }}{% if user.is_admin_role %} Install Tesseract OCR (see README) and restart the app.{% endif %}</div></div>
+      {% endif %}
     </div>
 
     <div class="card glass">
