@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% load ui %}
+{% block title %}Settings{% endblock %}
+{% block page_title %}Settings{% endblock %}
+{% block content %}
+<div class="grid grid-2">
+  <form method="post" class="card glass" autocomplete="off">{% csrf_token %}
+    <input type="hidden" name="section" value="password">
+    <div class="card-head"><h2>{% icon 'lock' %} Excel download password</h2>
+      {% if setting.has_download_password %}<span class="badge ok">Configured</span>{% else %}<span class="badge bad">Not set</span>{% endif %}</div>
+    <p class="subtle">Required before any generated report can be downloaded. Stored only as a salted hash{% if setting.download_password_changed_at %}; last changed {{ setting.download_password_changed_at|dtshow }}{% endif %}.</p>
+    {% include "partials/form_errors.html" with form=pw_form %}
+    {% include "partials/field.html" with field=pw_form.new_password %}
+    {% include "partials/field.html" with field=pw_form.confirm_password %}
+    <button class="btn btn-primary" type="submit">Update password</button>
+  </form>
+
+  <form method="post" class="card glass">{% csrf_token %}
+    <input type="hidden" name="section" value="general">
+    <div class="card-head"><h2>{% icon 'settings' %} Defaults</h2></div>
+    {% for field in st_form %}{% include "partials/field.html" %}{% endfor %}
+    <button class="btn btn-primary" type="submit">Save defaults</button>
+  </form>
+</div>
+
+<div class="grid grid-2" style="margin-top:18px">
+  <div class="card glass">
+    <div class="card-head"><h2>Picklists</h2></div>
+    <p class="subtle">Statuses, report types and item names offered in forms. Users can still type other values.</p>
+    <div class="table-wrap" style="max-height:340px">
+      <table class="tbl"><thead><tr><th>Type</th><th>Value</th><th>Active</th><th></th></tr></thead><tbody>
+      {% for o in options %}
+        <tr><td>{{ o.get_kind_display }}</td><td>{{ o.value }}</td><td>{% if o.is_active %}<span class="badge ok">Yes</span>{% else %}<span class="badge">No</span>{% endif %}</td>
+          <td><form method="post" action="{% url 'core:option_toggle' o.pk %}" class="row">{% csrf_token %}<button class="btn btn-sm" type="submit">{% if o.is_active %}Disable{% else %}Enable{% endif %}</button><button class="btn btn-sm btn-danger" name="delete" value="1" data-confirm="Delete option?">{% icon 'trash' 14 %}</button></form></td></tr>
+      {% endfor %}
+      </tbody></table>
+    </div>
+    <form method="post" class="row" style="margin-top:12px;align-items:flex-end">{% csrf_token %}
+      <input type="hidden" name="section" value="option">
+      <div style="flex:1;min-width:130px"><label>Type</label>{{ opt_form.kind }}</div>
+      <div style="flex:2;min-width:160px"><label>Value</label>{{ opt_form.value }}{{ opt_form.value.errors }}</div>
+      <div style="width:90px"><label>Order</label>{{ opt_form.sort_order }}</div>
+      <button class="btn btn-primary" type="submit">{% icon 'plus' 16 %} Add</button>
+    </form>
+  </div>
+
+  <div class="card glass">
+    <div class="card-head"><h2>{% icon 'sparkles' %} Custom parsing rules</h2></div>
+    <p class="subtle">Add a regex when a new SMS wording appears. Rules run before the built-in parser; the first capture group is used. For Channel/Bank, set a fixed value applied when the pattern matches.</p>
+    <div class="table-wrap" style="max-height:240px">
+      <table class="tbl"><thead><tr><th>Name</th><th>Institution</th><th>Field</th><th>Pattern</th><th></th></tr></thead><tbody>
+      {% for r in rules %}
+        <tr class="{% if not r.is_active %}skipped{% endif %}"><td>{{ r.name }}</td><td>{{ r.get_institution_display }}</td><td>{{ r.get_field_display }}</td><td class="mono" style="max-width:220px;overflow:hidden;text-overflow:ellipsis">{{ r.pattern }}</td>
+          <td><form method="post" action="{% url 'core:rule_toggle' r.pk %}" class="row">{% csrf_token %}<button class="btn btn-sm" type="submit">{% if r.is_active %}Disable{% else %}Enable{% endif %}</button><button class="btn btn-sm btn-danger" name="delete" value="1" data-confirm="Delete rule?">{% icon 'trash' 14 %}</button></form></td></tr>
+      {% empty %}<tr><td colspan="5" class="subtle" style="padding:14px">No custom rules – the built-in M-Pesa/KCB parser is used.</td></tr>{% endfor %}
+      </tbody></table>
+    </div>
+    <form method="post" style="margin-top:12px">{% csrf_token %}
+      <input type="hidden" name="section" value="rule">
+      {% include "partials/form_errors.html" with form=rule_form %}
+      <div class="form-grid">{% for field in rule_form %}{% include "partials/field.html" %}{% endfor %}</div>
+      <button class="btn btn-primary" type="submit">{% icon 'plus' 16 %} Add rule</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

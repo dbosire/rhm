@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% load ui %}
+{% block title %}Transaction #{{ txn.pk }}{% endblock %}
+{% block page_title %}Transaction #{{ txn.pk }}{% endblock %}
+{% block content %}
+<div class="grid grid-main">
+  <form method="post" class="card glass">{% csrf_token %}
+    <input type="hidden" name="next" value="{{ back_url }}">
+    <div class="card-head">
+      <h2>Parameters</h2>
+      <div class="row"><span class="badge {{ txn.workflow|workflow_class }}">{{ txn.get_workflow_display }}</span>
+      {% if txn.is_duplicate %}<span class="badge warn">Duplicate of <a href="{% url 'core:transaction_detail' txn.duplicate_of_id %}">#{{ txn.duplicate_of_id }}</a></span>{% endif %}</div>
+    </div>
+    {% if txn.issues %}
+    <div class="alert {% if txn.error_count %}bad{% else %}warn{% endif %}">{% icon 'alert' %}<ul class="issues mt-0" style="color:inherit">{% for i in txn.issues %}<li>{{ i.message }}</li>{% endfor %}</ul></div>
+    {% endif %}
+    {% include "partials/form_errors.html" %}
+    <div class="form-grid">
+      {% for field in form %}
+        {% if field.name == 'report_type' %}
+          <div class="field"><label for="{{ field.id_for_label }}">{{ field.label }}</label><input type="text" name="report_type" id="{{ field.id_for_label }}" value="{{ field.value|default:'' }}" list="dl-rt">{{ field.errors }}</div>
+        {% elif field.name == 'status' %}
+          <div class="field"><label for="{{ field.id_for_label }}">{{ field.label }}</label><input type="text" name="status" id="{{ field.id_for_label }}" value="{{ field.value|default:'' }}" list="dl-status">{{ field.errors }}</div>
+        {% else %}
+          {% include "partials/field.html" %}
+        {% endif %}
+      {% endfor %}
+    </div>
+    <datalist id="dl-rt">{% for o in report_type_options %}<option value="{{ o }}">{% endfor %}</datalist>
+    <datalist id="dl-status">{% for o in status_options %}<option value="{{ o }}">{% endfor %}</datalist>
+    {% if txn.calculated_amount is not None %}<p class="subtle">Quantity × Unit Cost = {{ txn.calculated_amount|money }}</p>{% endif %}
+    <div class="row end">
+      {% if back_url %}<a class="btn" href="{{ back_url }}">Back</a>{% endif %}
+      <button class="btn btn-primary" type="submit">{% icon 'check' 16 %} Save</button>
+    </div>
+  </form>
+
+  <div>
+    <div class="card glass">
+      <div class="card-head"><h2>Original SMS</h2>
+        {% if txn.batch %}<a class="subtle" href="{% url 'core:batch_detail' txn.batch.uid %}">Batch {{ txn.batch.short_uid }}</a>{% endif %}</div>
+      {% if txn.sms %}<div class="sms-text">{{ txn.sms.raw_text }}</div>{% else %}<p class="subtle">The source SMS is no longer stored.</p>{% endif %}
+    </div>
+    <div class="card glass">
+      <h2>Extraction details</h2>
+      <dl class="kv">
+        <dt>Institution</dt><dd>{{ txn.get_source_display }}</dd>
+        <dt>SMS amount</dt><dd>{{ txn.extracted_amount|money }}</dd>
+        <dt>SMS date/time</dt><dd>{{ txn.transaction_date|dtshow }}</dd>
+        <dt>Direction</dt><dd>{{ txn.direction|default:"—" }}</dd>
+        <dt>Counterparty</dt><dd>{{ txn.counterparty|default:"—" }}</dd>
+        <dt>Created</dt><dd>{{ txn.created_at|dtshow }} by {{ txn.created_by.email }}</dd>
+        <dt>Updated</dt><dd>{{ txn.updated_at|dtshow }}{% if txn.updated_by %} by {{ txn.updated_by.email }}{% endif %}</dd>
+      </dl>
+    </div>
+    {% if reports %}
+    <div class="card glass"><h2>Included in reports</h2>
+      <ul class="activity">{% for r in reports %}<li><span class="dot c-green">{% icon 'sheet' 15 %}</span><div class="grow"><b><a href="{% url 'core:report_detail' r.uid %}">{{ r.name }}</a></b><span class="subtle">{{ r.created_at|dtshow }}</span></div></li>{% endfor %}</ul>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

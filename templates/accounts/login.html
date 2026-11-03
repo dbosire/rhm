@@ -1,0 +1,14 @@
+{% extends "accounts/auth_base.html" %}
+{% block title %}Sign in{% endblock %}
+{% block auth %}
+<h1>Welcome back</h1>
+<p class="muted">Sign in with your email address.</p>
+{% include "partials/form_errors.html" %}
+<form method="post" data-loading="Signing in…">{% csrf_token %}
+  {% include "partials/field.html" with field=form.username %}
+  {% include "partials/field.html" with field=form.password %}
+  <input type="hidden" name="next" value="{{ next }}">
+  <button class="btn btn-primary btn-block" type="submit">Sign in</button>
+</form>
+<p class="subtle" style="margin-top:16px;text-align:center"><a href="{% url 'accounts:password_reset' %}">Forgot your password?</a></p>
+{% endblock %}

@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% load ui %}
+{% block title %}Map columns{% endblock %}
+{% block page_title %}Column mapping · {{ tpl.name }}{% endblock %}
+{% block content %}
+<form method="get" class="card glass">
+  {% if existing %}<input type="hidden" name="mapping" value="{{ existing.pk }}">{% endif %}
+  <div class="filters">
+    <div><label>Worksheet</label><select name="sheet" onchange="this.form.submit()">{% for s in sheets %}<option {% if s == sheet %}selected{% endif %}>{{ s }}</option>{% endfor %}</select></div>
+    <div><label>Header row</label><input type="number" min="1" name="header_row" value="{{ header_row }}"></div>
+    <div><label>First data row</label><input type="number" min="2" name="data_start_row" value="{{ data_start_row }}"></div>
+    <div class="row"><button class="btn" type="submit">{% icon 'refresh' 16 %} Reload headers</button></div>
+  </div>
+</form>
+
+<div class="grid grid-main">
+  <form method="post" class="card glass">{% csrf_token %}
+    <input type="hidden" name="sheet" value="{{ sheet }}">
+    <input type="hidden" name="header_row" value="{{ header_row }}">
+    <input type="hidden" name="data_start_row" value="{{ data_start_row }}">
+    <div class="card-head"><h2>Map parameters to columns</h2><span class="subtle">{{ headers|length }} header{{ headers|length|pluralize }} on row {{ header_row }}</span></div>
+    <div class="table-wrap">
+      <table class="tbl">
+        <thead><tr><th>Parameter</th><th>Excel column</th></tr></thead>
+        <tbody>
+        {% for key, label, col in params %}
+          <tr><td><b>{{ label }}</b></td>
+            <td><select name="map_{{ key }}">
+              <option value="">— not mapped —</option>
+              {% for c, h in headers.items %}<option value="{{ c }}" {% if c == col %}selected{% endif %}>{{ c }} · {{ h }}</option>{% endfor %}
+              {% for c in cols %}{% if c not in headers %}<option value="{{ c }}" {% if c == col %}selected{% endif %}>{{ c }} (empty header)</option>{% endif %}{% endfor %}
+            </select></td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="field" style="margin-top:14px"><label for="m-name">Save as</label><input id="m-name" name="name" maxlength="120" value="{% if existing %}{{ existing.name }}{% else %}{{ tpl.name }} – {{ sheet }}{% endif %}"></div>
+    <div class="alert info">{% icon 'sheet' %}<div>Data is appended after the last existing row (starting no earlier than row {{ data_start_row }}). Existing data, formatting and formulas are kept; a “Total” row is pushed down and its SUM range extended.</div></div>
+    <div class="row end"><a class="btn" href="{% url 'core:template_preview' tpl.pk %}">Cancel</a><button class="btn btn-primary" name="save" value="1" type="submit">{% icon 'check' 16 %} Save mapping</button></div>
+  </form>
+  <div class="card glass">
+    <h2>Worksheet preview</h2>
+    <div class="table-wrap" style="max-height:60vh">
+      <table class="tbl preview-grid">
+        <thead><tr><th></th>{% for c in cols %}<th>{{ c }}</th>{% endfor %}</tr></thead>
+        <tbody>{% for r in rows %}<tr class="{% if forloop.counter == header_row %}hdr{% elif forloop.counter == data_start_row %}datarow{% endif %}"><td class="rownum">{{ forloop.counter }}</td>{% for v in r %}<td title="{{ v }}">{{ v }}</td>{% endfor %}</tr>{% endfor %}</tbody>
+      </table>
+    </div>
+    <p class="subtle" style="margin-top:8px"><span class="badge info">blue</span> header row · <span class="badge ok">green</span> first data row</p>
+  </div>
+</div>
+{% endblock %}

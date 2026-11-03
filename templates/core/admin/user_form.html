@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% load ui %}
+{% block title %}{% if obj %}Edit user{% else %}New user{% endif %}{% endblock %}
+{% block page_title %}{% if obj %}Edit {{ obj.email }}{% else %}New user{% endif %}{% endblock %}
+{% block content %}
+<form method="post" class="card glass" style="max-width:640px" autocomplete="off">{% csrf_token %}
+  {% include "partials/form_errors.html" %}
+  {% for field in form %}{% include "partials/field.html" %}{% endfor %}
+  <div class="alert info">{% icon 'users' %}<div><b>Administrator</b>: everything incl. users, settings and audit log. <b>Reviewer</b>: sees all records, can approve/reject. <b>Standard user</b>: sees and manages only their own records.</div></div>
+  <div class="row end"><a class="btn" href="{% url 'core:user_list' %}">Cancel</a><button class="btn btn-primary" type="submit">Save user</button></div>
+</form>
+{% endblock %}

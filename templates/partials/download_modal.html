@@ -1,0 +1,20 @@
+{% load ui %}
+<div class="modal-backdrop" id="dl-modal" role="dialog" aria-modal="true" aria-labelledby="dl-title">
+  <div class="modal glass">
+    <div class="lock-ico">{% icon 'lock' 26 %}</div>
+    <h2 id="dl-title">Protected download</h2>
+    <p class="muted">Enter the download password to get <b id="dl-name">report</b>.</p>
+    <form autocomplete="off" novalidate>
+      <label for="dl-password">Download password</label>
+      <div class="pw-wrap">
+        <input type="password" id="dl-password" name="dl-password" autocomplete="off" required>
+        <button type="button" data-toggle-pw aria-label="Show or hide password">{% icon 'eye' 18 %}</button>
+      </div>
+      <p class="modal-error" role="alert"></p>
+      <div class="row end" style="margin-top:14px">
+        <button type="button" class="btn" data-close>Cancel</button>
+        <button type="submit" class="btn btn-primary">{% icon 'download' %} Verify &amp; download</button>
+      </div>
+    </form>
+  </div>
+</div>

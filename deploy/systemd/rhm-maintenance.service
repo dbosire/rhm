@@ -1,0 +1,18 @@
+[Unit]
+Description=RHM Extractor – retention purge, session cleanup
+After=mysql.service mariadb.service
+
+[Service]
+Type=oneshot
+User=rhm
+Group=rhm
+WorkingDirectory=/opt/rhm/app
+Environment=RHM_ENV_FILE=/etc/rhm/rhm.env
+Environment=PYTHONDONTWRITEBYTECODE=1
+EnvironmentFile=/etc/rhm/rhm.env
+ExecStart=/opt/rhm/venv/bin/python manage.py purge_old_data
+ExecStart=/opt/rhm/venv/bin/python manage.py clearsessions
+ProtectSystem=strict
+ReadWritePaths=/var/lib/rhm /var/log/rhm
+PrivateTmp=true
+NoNewPrivileges=true

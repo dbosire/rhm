@@ -1,0 +1,17 @@
+[Unit]
+Description=RHM Extractor – nightly MySQL + files backup
+After=mysql.service mariadb.service
+
+[Service]
+Type=oneshot
+User=rhm
+Group=rhm
+Environment=RHM_ENV_FILE=/etc/rhm/rhm.env
+EnvironmentFile=/etc/rhm/rhm.env
+ExecStart=/opt/rhm/app/deploy/bin/rhm-backup.sh
+Nice=10
+IOSchedulingClass=idle
+ProtectSystem=strict
+ReadWritePaths=/var/lib/rhm
+PrivateTmp=true
+NoNewPrivileges=true

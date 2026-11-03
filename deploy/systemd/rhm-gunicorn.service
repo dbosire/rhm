@@ -1,0 +1,40 @@
+[Unit]
+Description=RHM Extractor (Django via Gunicorn)
+After=network.target mysql.service mariadb.service
+Wants=mysql.service
+
+[Service]
+Type=notify
+NotifyAccess=main
+User=rhm
+Group=rhm
+WorkingDirectory=/opt/rhm/app
+Environment=RHM_ENV_FILE=/etc/rhm/rhm.env
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=/etc/rhm/rhm.env
+RuntimeDirectory=rhm
+RuntimeDirectoryMode=0750
+ExecStart=/opt/rhm/venv/bin/gunicorn config.wsgi:application -c /opt/rhm/app/deploy/gunicorn.conf.py
+ExecReload=/bin/kill -s HUP $MAINPID
+KillMode=mixed
+Restart=on-failure
+RestartSec=5
+
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+ReadWritePaths=/var/lib/rhm /var/log/rhm
+CapabilityBoundingSet=
+UMask=0027
+
+[Install]
+WantedBy=multi-user.target

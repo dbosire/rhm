@@ -1,0 +1,6 @@
+Django>=5.2,<6.0
+openpyxl>=3.1
+defusedxml>=0.7          # hardened XML parsing for uploaded workbooks (used automatically by openpyxl)
+python-dotenv>=1.0
+whitenoise>=6.6
+mysqlclient>=2.2         # MySQL / MariaDB driver (Linux needs: default-libmysqlclient-dev pkg-config)

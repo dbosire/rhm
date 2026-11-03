@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% load ui %}
+{% block title %}Report history{% endblock %}
+{% block page_title %}Report history{% endblock %}
+{% block content %}
+<form method="get" class="card glass">
+  <div class="filters">
+    <div><label>Report type</label><select name="report_type"><option value="">All</option>{% for r in report_types %}<option {% if filters.report_type == r %}selected{% endif %}>{{ r }}</option>{% endfor %}</select></div>
+    <div><label>Status</label><select name="state"><option value="">All</option>{% for v, l in states %}<option value="{{ v }}" {% if filters.state == v %}selected{% endif %}>{{ l }}</option>{% endfor %}</select></div>
+    <div><label>From</label><input type="date" name="date_from" value="{{ filters.date_from }}"></div>
+    <div><label>To</label><input type="date" name="date_to" value="{{ filters.date_to }}"></div>
+    <div class="row"><button class="btn btn-primary" type="submit">{% icon 'filter' 16 %} Filter</button><a class="btn" href="{% url 'core:report_list' %}">Reset</a></div>
+  </div>
+</form>
+<div class="card glass">
+  <div class="table-wrap">
+    <table class="tbl responsive">
+      <thead><tr><th>Report</th><th>Generated</th><th>By</th><th>Type</th><th>Output</th><th class="num">Records</th><th class="num">Total (KES)</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+      {% for r in page %}
+      <tr>
+        <td data-label="Report"><a href="{% url 'core:report_detail' r.uid %}">{{ r.name }}</a></td>
+        <td data-label="Generated" class="nowrap">{{ r.created_at|dtshow }}</td>
+        <td data-label="By">{{ r.created_by.email }}</td>
+        <td data-label="Type">{{ r.report_type|default:"—" }}</td>
+        <td data-label="Output">{{ r.get_mode_display }}{% if r.template %}<div class="subtle">{{ r.template.name }}</div>{% endif %}</td>
+        <td data-label="Records" class="num">{{ r.record_count }}</td>
+        <td data-label="Total" class="num">{{ r.total_amount|money }}</td>
+        <td data-label="Status"><span class="badge {% if r.state == 'generated' %}ok{% else %}muted{% endif %}">{{ r.get_state_display }}</span></td>
+        <td data-label="">{% if r.state == 'generated' %}<button type="button" class="btn btn-sm btn-primary" data-download="{% url 'core:report_download' r.uid %}" data-name="{{ r.filename }}">{% icon 'lock' 14 %} Download</button>{% endif %}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="9"><div class="empty">{% icon 'history' 42 %}<div>No reports generated yet.</div></div></td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "partials/pager.html" %}
+</div>
+{% endblock %}
+{% block modals %}{% include "partials/download_modal.html" %}{% endblock %}

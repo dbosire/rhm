@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% load static ui humanize %}
+{% block title %}Dashboard{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+{% block topbar_actions %}<a class="btn btn-primary" href="{% url 'core:extract' %}">{% icon 'plus' %} <span>New extraction</span></a>{% endblock %}
+{% block content %}
+<form method="get" class="card glass">
+  <div class="filters">
+    <div><label>From</label><input type="date" name="date_from" value="{{ filters.date_from }}"></div>
+    <div><label>To</label><input type="date" name="date_to" value="{{ filters.date_to }}"></div>
+    <div><label>Bank</label><select name="bank"><option value="">All banks</option>{% for b in banks %}<option {% if filters.bank == b %}selected{% endif %}>{{ b }}</option>{% endfor %}</select></div>
+    <div><label>Channel</label><select name="channel"><option value="">All channels</option>{% for c in channels %}<option {% if filters.channel == c %}selected{% endif %}>{{ c }}</option>{% endfor %}</select></div>
+    <div><label>Report type</label><select name="report_type"><option value="">All types</option>{% for r in report_types %}<option {% if filters.report_type == r %}selected{% endif %}>{{ r }}</option>{% endfor %}</select></div>
+    <div><label>Status</label><select name="status"><option value="">All statuses</option>{% for s in statuses %}<option {% if filters.status == s %}selected{% endif %}>{{ s }}</option>{% endfor %}</select></div>
+    <div class="row"><button class="btn btn-primary" type="submit">{% icon 'filter' 16 %} Apply</button><a class="btn" href="{% url 'core:dashboard' %}">Reset</a></div>
+  </div>
+</form>
+
+<div class="grid grid-4" style="margin-top:18px">
+  <div class="stat glass"><div class="glow c-indigo"></div>
+    <div class="label"><span class="stat-ico c-indigo">{% icon 'message' 16 %}</span>SMS processed</div>
+    <div class="value">{{ stats.sms_total|intcomma }}</div>
+    <div class="foot"><span class="badge ok">{{ stats.sms_ok|intcomma }} extracted</span> <span class="badge bad">{{ stats.sms_failed|intcomma }} failed</span></div>
+  </div>
+  <div class="stat glass"><div class="glow c-green"></div>
+    <div class="label"><span class="stat-ico c-green">{% icon 'wallet' 16 %}</span>Total amount</div>
+    <div class="value">KES {{ stats.total_amount|money }}</div>
+    <div class="foot">{{ stats.txn_count|intcomma }} transaction{{ stats.txn_count|pluralize }}</div>
+  </div>
+  <div class="stat glass"><div class="glow c-teal"></div>
+    <div class="label"><span class="stat-ico c-teal">{% icon 'bank' 16 %}</span>By institution</div>
+    <div class="value">{{ stats.mpesa|intcomma }} <small class="subtle">M-Pesa</small> · {{ stats.kcb|intcomma }} <small class="subtle">KCB</small></div>
+    <div class="foot">SMS source detected</div>
+  </div>
+  <div class="stat glass"><div class="glow c-amber"></div>
+    <div class="label"><span class="stat-ico c-amber">{% icon 'alert' 16 %}</span>Needs attention</div>
+    <div class="value">{{ stats.duplicates|intcomma }} <small class="subtle">duplicates</small></div>
+    <div class="foot"><a href="{% url 'core:transaction_list' %}?flag=review">{{ stats.review|intcomma }} awaiting review</a> · {{ stats.reports|intcomma }} report{{ stats.reports|pluralize }} generated</div>
+  </div>
+</div>
+
+<div class="grid grid-main" style="margin-top:18px">
+  <div class="card glass">
+    <div class="card-head"><h2>Amount processed · last 30 days</h2></div>
+    <div class="chart-box"><canvas id="chart-daily" aria-label="Daily amount chart"></canvas></div>
+  </div>
+  <div class="card glass">
+    <div class="card-head"><h2>Amount by bank</h2></div>
+    <div class="chart-box"><canvas id="chart-bank" aria-label="Amount by bank"></canvas></div>
+  </div>
+</div>
+
+<div class="grid grid-3" style="margin-top:18px">
+  <div class="card glass">
+    <div class="card-head"><h2>Transactions by channel</h2></div>
+    <div class="chart-box sm"><canvas id="chart-channel"></canvas></div>
+  </div>
+  <div class="card glass">
+    <div class="card-head"><h2>Workflow status</h2></div>
+    <div class="chart-box sm"><canvas id="chart-workflow"></canvas></div>
+  </div>
+  <div class="card glass">
+    <div class="card-head"><h2>Recent batches</h2><a href="{% url 'core:batch_list' %}" class="subtle">View all</a></div>
+    <ul class="activity">
+      {% for b in recent_batches %}
+      <li><span class="dot c-indigo">{% icon 'layers' 16 %}</span>
+        <div class="grow"><b><a href="{% url 'core:batch_detail' b.uid %}">Batch {{ b.short_uid }}</a></b><span class="subtle">{{ b.created_at|naturaltime }} · {{ b.get_input_method_display }}</span></div>
+        <span class="badge {% if b.state == 'completed' %}ok{% elif b.state == 'failed' %}bad{% else %}warn{% endif %}">{{ b.extracted_count }}/{{ b.submitted_count }}</span></li>
+      {% empty %}<li class="subtle">No batches yet.</li>{% endfor %}
+    </ul>
+  </div>
+</div>
+
+<div class="card glass" style="margin-top:18px">
+  <div class="card-head"><h2>Recent transactions</h2><a href="{% url 'core:transaction_list' %}" class="subtle">View all</a></div>
+  <div class="table-wrap">
+    <table class="tbl responsive">
+      <thead><tr><th>Date</th><th>Source</th><th>Reference</th><th>Receipt</th><th class="num">Amount</th><th>Bank</th><th>Channel</th><th>Workflow</th></tr></thead>
+      <tbody>
+      {% for t in recent %}
+      <tr>
+        <td data-label="Date" class="nowrap">{{ t.submission_date|dtshow }}</td>
+        <td data-label="Source"><span class="badge {% if t.source == 'MPESA' %}mpesa{% elif t.source == 'KCB' %}kcb{% endif %}">{{ t.get_source_display }}</span></td>
+        <td data-label="Reference"><a href="{% url 'core:transaction_detail' t.pk %}">{{ t.reference|default:"—"|truncatechars:42 }}</a></td>
+        <td data-label="Receipt" class="mono">{{ t.mpesa_receipt|default:"—" }}</td>
+        <td data-label="Amount" class="num">{{ t.amount|money }}</td>
+        <td data-label="Bank">{{ t.bank|default:"—" }}</td>
+        <td data-label="Channel">{{ t.channel|default:"—" }}</td>
+        <td data-label="Workflow"><span class="badge {{ t.workflow|workflow_class }}">{{ t.get_workflow_display }}</span></td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="8"><div class="empty">{% icon 'message' 42 %}<div>No transactions yet. <a href="{% url 'core:extract' %}">Extract your first SMS</a>.</div></div></td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{{ chart_data|json_script:"chart-data" }}
+{% endblock %}
+{% block scripts %}<script src="{% static 'vendor/chart.umd.min.js' %}"></script>{% endblock %}

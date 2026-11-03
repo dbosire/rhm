@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% load ui humanize %}
+{% block title %}Extraction batches{% endblock %}
+{% block page_title %}Extraction batches{% endblock %}
+{% block topbar_actions %}<a class="btn btn-primary" href="{% url 'core:extract' %}">{% icon 'plus' %} New</a>{% endblock %}
+{% block content %}
+<div class="card glass">
+  <div class="tabs">
+    <a href="?" class="{% if not state %}active{% endif %}">All</a>
+    {% for v, l in states %}<a href="?state={{ v }}" class="{% if state == v %}active{% endif %}">{{ l }}</a>{% endfor %}
+  </div>
+  <div class="table-wrap">
+    <table class="tbl responsive">
+      <thead><tr><th>Batch ID</th><th>Created</th><th>By</th><th>Input</th><th class="num">Submitted</th><th class="num">Extracted</th><th class="num">Failed</th><th class="num">Duplicates</th><th>State</th><th></th></tr></thead>
+      <tbody>
+      {% for b in page %}
+      <tr>
+        <td data-label="Batch" class="mono"><a href="{% url 'core:batch_detail' b.uid %}" title="{{ b.uid }}">{{ b.short_uid }}</a></td>
+        <td data-label="Created" class="nowrap">{{ b.created_at|dtshow }}</td>
+        <td data-label="By">{{ b.created_by.email }}</td>
+        <td data-label="Input">{{ b.get_input_method_display }}{% if b.filename %}<div class="subtle">{{ b.filename|truncatechars:28 }}</div>{% endif %}</td>
+        <td data-label="Submitted" class="num">{{ b.submitted_count }}</td>
+        <td data-label="Extracted" class="num">{{ b.extracted_count }}</td>
+        <td data-label="Failed" class="num">{% if b.failed_count %}<span class="badge bad">{{ b.failed_count }}</span>{% else %}0{% endif %}</td>
+        <td data-label="Duplicates" class="num">{% if b.duplicate_count %}<span class="badge warn">{{ b.duplicate_count }}</span>{% else %}0{% endif %}</td>
+        <td data-label="State"><span class="badge {% if b.state == 'completed' %}ok{% elif b.state == 'failed' %}bad{% else %}warn{% endif %}">{{ b.get_state_display }}</span></td>
+        <td data-label=""><div class="row">
+          <a class="btn btn-sm" href="{% url 'core:batch_detail' b.uid %}">{% icon 'eye' 15 %} Review</a>
+          {% if b.extracted_count %}<a class="btn btn-sm" href="{% url 'core:batch_generate' b.uid %}">{% icon 'sheet' 15 %} Excel</a>{% endif %}
+        </div></td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="10"><div class="empty">{% icon 'layers' 42 %}<div>No batches yet.</div></div></td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "partials/pager.html" %}
+</div>
+{% endblock %}

@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% load ui %}
+{% block title %}{{ tpl.name }}{% endblock %}
+{% block page_title %}Template · {{ tpl.name }}{% endblock %}
+{% block topbar_actions %}<a class="btn btn-primary" href="{% url 'core:template_mapping' tpl.pk %}?sheet={{ sheet|urlencode }}">{% icon 'map' %} <span>Map columns</span></a>{% endblock %}
+{% block content %}
+<div class="card glass">
+  <div class="card-head">
+    <div class="tabs mb-0">{% for s in sheets %}<a href="?sheet={{ s|urlencode }}" class="{% if s == sheet %}active{% endif %}">{{ s }}</a>{% endfor %}</div>
+    <span class="subtle">{{ tpl.original_filename }}</span>
+  </div>
+  <p class="muted">Detected header row: <b>{{ header_row }}</b> — {% for col, h in headers.items %}<span class="badge info">{{ col }}: {{ h }}</span> {% empty %}<span class="badge warn">no headers found</span>{% endfor %}</p>
+  <div class="table-wrap" style="max-height:60vh">
+    <table class="tbl preview-grid">
+      <thead><tr><th></th>{% for c in cols %}<th>{{ c }}</th>{% endfor %}</tr></thead>
+      <tbody>
+      {% for r in rows %}
+        <tr class="{% if forloop.counter == header_row %}hdr{% endif %}"><td class="rownum">{{ forloop.counter }}</td>{% for v in r %}<td title="{{ v }}">{{ v }}</td>{% endfor %}</tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="subtle" style="margin-top:8px">Preview shows the first 25 rows and 26 columns.</p>
+</div>
+{% if mappings %}
+<div class="card glass">
+  <h2>Mappings for this template</h2>
+  <div class="row">{% for m in mappings %}<a class="btn btn-sm" href="{% url 'core:template_mapping' tpl.pk %}?mapping={{ m.pk }}">{% icon 'edit' 14 %} {{ m.name }} ({{ m.sheet_name }})</a>{% endfor %}</div>
+</div>
+{% endif %}
+{% endblock %}

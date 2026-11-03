@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% load ui %}
+{% block title %}Extract SMS{% endblock %}
+{% block page_title %}Extract SMS{% endblock %}
+{% block content %}
+<form method="post" enctype="multipart/form-data" data-loading="Extracting transactions…">{% csrf_token %}
+  {% include "partials/form_errors.html" %}
+  <div class="grid grid-main">
+    <div class="card glass">
+      <div class="card-head">
+        <h2>{% icon 'message' %} SMS messages</h2>
+        <span class="badge info" id="sms-count">0 messages</span>
+      </div>
+      <div class="field">
+        <label>Institution</label>
+        <div class="segmented" role="radiogroup">
+          {% for val, lbl in form.fields.source.choices %}
+          <input type="radio" id="src-{{ val }}" name="source" value="{{ val }}" {% if form.source.value == val or not form.source.value and val == 'AUTO' %}checked{% endif %}>
+          <label for="src-{{ val }}">{% if val == 'MPESA' %}{% icon 'phone' 16 %}{% elif val == 'KCB' %}{% icon 'bank' 16 %}{% else %}{% icon 'sparkles' 16 %}{% endif %} {{ lbl }}</label>
+          {% endfor %}
+        </div>
+        <span class="help">Auto-detect identifies M-Pesa and KCB messages; choose one to force the institution.</span>
+      </div>
+      <div class="field">
+        <label for="id_sms_text">{{ form.sms_text.label }}</label>
+        {{ form.sms_text }}
+        {{ form.sms_text.errors }}
+        <span class="help">Bulk paste supported – separate messages with a blank line, or one message per line.</span>
+      </div>
+      <div class="dropzone">
+        <div class="dz-ico">{% icon 'upload' 22 %}</div>
+        <b>Drop a file here or click to browse</b>
+        <div class="subtle">TXT (one message per line/paragraph) · CSV / Excel (a column named “message”, “sms” or “body”)</div>
+        <div class="dz-file"></div>
+        {{ form.upload }}
+      </div>
+      {{ form.upload.errors }}
+    </div>
+
+    <div class="card glass">
+      <div class="card-head"><h2>{% icon 'sheet' %} Default parameters</h2></div>
+      <p class="subtle">Applied to every extracted record – you can edit each record afterwards.</p>
+      <div class="field">
+        <label for="id_user_email">User Email</label>
+        <input type="email" id="id_user_email" value="{{ user.email }}" disabled>
+        <span class="help">Filled automatically from your account.</span>
+      </div>
+      <div class="field">
+        <label for="id_report_type">Report Type</label>
+        <input type="text" name="report_type" id="id_report_type" list="dl-report-types" value="{{ form.report_type.value|default:'' }}" maxlength="80">
+        <datalist id="dl-report-types">{% for o in report_type_options %}<option value="{{ o }}">{% endfor %}</datalist>
+      </div>
+      <div class="field">
+        <label for="id_item_name">Item Name</label>
+        <input type="text" name="item_name" id="id_item_name" list="dl-items" value="{{ form.item_name.value|default:'' }}" maxlength="200">
+        <datalist id="dl-items">{% for o in item_name_options %}<option value="{{ o }}">{% endfor %}</datalist>
+      </div>
+      <div class="grid grid-2" style="gap:0 12px">
+        {% include "partials/field.html" with field=form.quantity %}
+        {% include "partials/field.html" with field=form.unit_cost %}
+      </div>
+      <div class="field">
+        <label for="id_status">Status</label>
+        <select name="status" id="id_status">
+          {% for o in status_options %}<option {% if form.status.value == o %}selected{% endif %}>{{ o }}</option>{% endfor %}
+        </select>
+      </div>
+      {% include "partials/field.html" with field=form.submission_date %}
+      <p class="subtle">Amount comes from the SMS. If the SMS has no amount, Quantity × Unit Cost is used.</p>
+      <button class="btn btn-primary btn-block" type="submit">{% icon 'sparkles' %} Extract transactions</button>
+    </div>
+  </div>
+</form>
+{% endblock %}

@@ -1,0 +1,99 @@
+{% load static ui %}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{{ APP_NAME }}{% endblock %} · {{ APP_NAME }}</title>
+  <script>
+    (function () {
+      var t = null;
+      try { t = localStorage.getItem("rhm-theme"); } catch (e) {}
+      if (!t) t = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      document.documentElement.setAttribute("data-theme", t);
+    })();
+  </script>
+  <link rel="stylesheet" href="{% static 'css/app.css' %}">
+  {% block head %}{% endblock %}
+</head>
+<body>
+<div class="bg-blobs" aria-hidden="true"><span></span><span></span><span></span></div>
+{% block body %}
+<div class="app">
+  <aside class="sidebar glass" aria-label="Main navigation">
+    <div class="brand">
+      <div class="brand-mark">R</div>
+      <div><b>RHM Extractor</b><small>M-Pesa &amp; KCB SMS → Excel</small></div>
+    </div>
+    <nav class="nav">
+      <a href="{% url 'core:dashboard' %}" class="{% if current_url_name == 'dashboard' %}active{% endif %}">{% icon 'dashboard' %} Dashboard</a>
+      <div class="nav-label">Extraction</div>
+      <a href="{% url 'core:extract' %}" class="{% if current_url_name == 'extract' %}active{% endif %}">{% icon 'message' %} Extract SMS</a>
+      <a href="{% url 'core:batch_list' %}" class="{% if current_url_name in 'batch_list batch_detail' %}active{% endif %}">{% icon 'layers' %} Batches</a>
+      <a href="{% url 'core:transaction_list' %}" class="{% if current_url_name in 'transaction_list transaction_detail' %}active{% endif %}">{% icon 'list' %} Transactions</a>
+      <div class="nav-label">Excel</div>
+      <a href="{% url 'core:generate' %}" class="{% if current_url_name == 'generate' %}active{% endif %}">{% icon 'sheet' %} Generate Excel</a>
+      <a href="{% url 'core:template_list' %}" class="{% if current_url_name in 'template_list template_preview template_mapping' %}active{% endif %}">{% icon 'map' %} Templates &amp; Mapping</a>
+      <a href="{% url 'core:report_list' %}" class="{% if current_url_name in 'report_list report_detail' %}active{% endif %}">{% icon 'history' %} Report History</a>
+      {% if user.is_admin_role %}
+      <div class="nav-label">Administration</div>
+      <a href="{% url 'core:user_list' %}" class="{% if current_url_name in 'user_list user_create user_edit' %}active{% endif %}">{% icon 'users' %} Users</a>
+      <a href="{% url 'core:settings' %}" class="{% if current_url_name == 'settings' %}active{% endif %}">{% icon 'settings' %} Settings</a>
+      <a href="{% url 'core:audit_log' %}" class="{% if current_url_name == 'audit_log' %}active{% endif %}">{% icon 'shield' %} Audit Log</a>
+      {% endif %}
+    </nav>
+    <div class="sidebar-foot">
+      <div class="user-chip">
+        <div class="avatar">{{ user.get_short_name|first|upper }}</div>
+        <div class="meta"><b title="{{ user.email }}">{{ user.email }}</b><small>{{ user.get_role_display }}</small></div>
+      </div>
+      <div class="row" style="padding: 4px 6px 0">
+        <a class="btn btn-sm" href="{% url 'accounts:password_change' %}">{% icon 'lock' 15 %} Password</a>
+        <form method="post" action="{% url 'accounts:logout' %}" style="margin-left:auto">{% csrf_token %}
+          <button class="btn btn-sm" type="submit">{% icon 'logout' 15 %} Sign out</button>
+        </form>
+      </div>
+    </div>
+  </aside>
+  <div class="scrim"></div>
+
+  <main class="main">
+    <header class="topbar glass">
+      <button class="icon-btn menu-btn" type="button" data-nav-toggle aria-label="Open menu">{% icon 'menu' %}</button>
+      <h1>{% block page_title %}{% endblock %}</h1>
+      {% block topbar_actions %}{% endblock %}
+      <button class="icon-btn" type="button" data-theme-toggle aria-label="Toggle theme">
+        <span class="i-sun hidden">{% icon 'sun' %}</span><span class="i-moon">{% icon 'moon' %}</span>
+      </button>
+    </header>
+    <div class="content">
+      {% block content %}{% endblock %}
+    </div>
+  </main>
+</div>
+{% endblock %}
+
+{% if messages %}
+<div class="toasts" role="status" aria-live="polite">
+  {% for m in messages %}
+  <div class="toast glass {{ m.tags }}">
+    {% if m.level_tag == 'success' %}{% icon 'check' %}{% elif m.level_tag == 'error' %}{% icon 'x' %}{% else %}{% icon 'alert' %}{% endif %}
+    <div>{{ m }}</div>
+    <button class="x" type="button" aria-label="Dismiss">{% icon 'x' 16 %}</button>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<div class="loader" id="loader" aria-hidden="true">
+  <div class="loader-card glass">
+    <div class="spinner"></div>
+    <b id="loader-text">Processing…</b>
+    <div class="progress"><span></span></div>
+  </div>
+</div>
+
+{% block modals %}{% endblock %}
+{% block scripts %}{% endblock %}
+<script src="{% static 'js/app.js' %}"></script>
+</body>
+</html>

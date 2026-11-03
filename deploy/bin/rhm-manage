@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# Run Django management commands as the service user with the production environment.
+#   sudo rhm-manage createsuperuser
+#   sudo rhm-manage bootstrap
+set -euo pipefail
+APP_DIR="${APP_DIR:-/opt/rhm/app}"
+VENV="${VENV:-/opt/rhm/venv}"
+ENV_FILE="${RHM_ENV_FILE:-/etc/rhm/rhm.env}"
+if [ "$(id -un)" != "rhm" ]; then
+  exec sudo -u rhm -H env RHM_ENV_FILE="$ENV_FILE" PYTHONDONTWRITEBYTECODE=1 "$0" "$@"
+fi
+cd "$APP_DIR"
+exec env RHM_ENV_FILE="$ENV_FILE" "$VENV/bin/python" manage.py "$@"

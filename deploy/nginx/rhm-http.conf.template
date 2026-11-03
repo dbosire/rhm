@@ -1,0 +1,7 @@
+# /etc/nginx/sites-available/rhm  (HTTP; certbot --nginx adds HTTPS + redirect to this file)
+server {
+    listen 80;
+    listen [::]:80;
+    server_name __SERVER_NAME__;
+    include snippets/rhm-locations.conf;
+}

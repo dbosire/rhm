@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% load ui %}
+{% block title %}Templates{% endblock %}
+{% block page_title %}Excel templates &amp; mappings{% endblock %}
+{% block content %}
+<div class="grid grid-main">
+  <div class="card glass">
+    <div class="card-head"><h2>Templates</h2></div>
+    <div class="table-wrap">
+      <table class="tbl responsive">
+        <thead><tr><th>Name</th><th>File</th><th>Worksheets</th><th>Owner</th><th>Uploaded</th><th></th></tr></thead>
+        <tbody>
+        {% for t in templates %}
+          <tr>
+            <td data-label="Name"><a href="{% url 'core:template_preview' t.pk %}">{{ t.name }}</a>{% if t.is_shared %} <span class="badge info">Shared</span>{% endif %}</td>
+            <td data-label="File" class="subtle">{{ t.original_filename|truncatechars:32 }} · {{ t.size_bytes|filesizeformat }}</td>
+            <td data-label="Sheets">{{ t.sheet_names|join:", "|truncatechars:40 }}</td>
+            <td data-label="Owner">{{ t.owner.email }}</td>
+            <td data-label="Uploaded" class="nowrap">{{ t.created_at|dtshow }}</td>
+            <td data-label=""><div class="row">
+              <a class="btn btn-sm" href="{% url 'core:template_preview' t.pk %}">{% icon 'eye' 14 %} Preview</a>
+              <a class="btn btn-sm" href="{% url 'core:template_mapping' t.pk %}">{% icon 'map' 14 %} Map</a>
+              {% if t.owner_id == user.pk or user.is_admin_role %}
+              <form method="post" action="{% url 'core:template_delete' t.pk %}">{% csrf_token %}<button class="btn btn-sm btn-danger" data-confirm="Delete template '{{ t.name }}'?">{% icon 'trash' 14 %}</button></form>
+              {% endif %}
+            </div></td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="6"><div class="empty">{% icon 'file' 42 %}<div>No templates uploaded yet.</div></div></td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card-head" style="margin-top:22px"><h2>Saved column mappings</h2></div>
+    <div class="table-wrap">
+      <table class="tbl responsive">
+        <thead><tr><th>Mapping</th><th>Template</th><th>Worksheet</th><th>Header / data row</th><th>Mapped</th><th></th></tr></thead>
+        <tbody>
+        {% for m in mappings %}
+          <tr>
+            <td data-label="Mapping">{{ m.name }}</td>
+            <td data-label="Template">{{ m.template.name|default:"—" }}</td>
+            <td data-label="Sheet">{{ m.sheet_name }}</td>
+            <td data-label="Rows">{{ m.header_row }} / {{ m.data_start_row }}</td>
+            <td data-label="Mapped">{{ m.mapping|length }} column{{ m.mapping|length|pluralize }}</td>
+            <td data-label=""><div class="row">
+              {% if m.template %}<a class="btn btn-sm" href="{% url 'core:template_mapping' m.template.pk %}?mapping={{ m.pk }}">{% icon 'edit' 14 %} Edit</a>{% endif %}
+              <form method="post" action="{% url 'core:mapping_delete' m.pk %}">{% csrf_token %}<button class="btn btn-sm btn-danger" data-confirm="Delete this mapping?">{% icon 'trash' 14 %}</button></form>
+            </div></td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="6" class="subtle" style="padding:16px">No saved mappings. Open a template and choose “Map”.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <form method="post" enctype="multipart/form-data" class="card glass" data-loading="Uploading and checking workbook…">{% csrf_token %}
+    <div class="card-head"><h2>{% icon 'upload' %} Upload template</h2></div>
+    {% include "partials/form_errors.html" %}
+    {% include "partials/field.html" with field=form.name %}
+    <div class="dropzone">
+      <div class="dz-ico">{% icon 'sheet' 22 %}</div>
+      <b>Drop an .xlsx file or click</b>
+      <div class="subtle">Max {{ MAX_UPLOAD_MB }} MB · macros and external links are rejected</div>
+      <div class="dz-file"></div>
+      {{ form.upload }}
+    </div>
+    {{ form.upload.errors }}
+    {% if user.is_admin_role %}<div class="field" style="margin-top:12px">{% include "partials/field.html" with field=form.is_shared %}</div>{% endif %}
+    <button class="btn btn-primary btn-block" type="submit" style="margin-top:12px">Upload</button>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% load ui %}
+{% block title %}Audit log{% endblock %}
+{% block page_title %}Audit log{% endblock %}
+{% block content %}
+<div class="card glass">
+  <div class="tabs">
+    <a href="?" class="{% if not action and not request.GET.failed %}active{% endif %}">All</a>
+    {% for a in actions %}<a href="?action={{ a }}" class="{% if action == a %}active{% endif %}">{{ a|capfirst }}</a>{% endfor %}
+    <a href="?failed=1" class="{% if request.GET.failed %}active{% endif %}">Failed only</a>
+  </div>
+  <div class="table-wrap">
+    <table class="tbl responsive">
+      <thead><tr><th>When</th><th>User</th><th>Action</th><th>Object</th><th>Result</th><th>IP</th><th>Details</th></tr></thead>
+      <tbody>
+      {% for l in page %}
+      <tr>
+        <td data-label="When" class="nowrap">{{ l.created_at|dtshow }}</td>
+        <td data-label="User">{{ l.user.email|default:"system" }}</td>
+        <td data-label="Action" class="mono">{{ l.action }}</td>
+        <td data-label="Object">{{ l.object_type }}{% if l.object_id %} #{{ l.object_id }}{% endif %}</td>
+        <td data-label="Result">{% if l.success %}<span class="badge ok">OK</span>{% else %}<span class="badge bad">Denied</span>{% endif %}</td>
+        <td data-label="IP" class="mono">{{ l.ip_address|default:"—" }}</td>
+        <td data-label="Details" class="subtle">{% for k, v in l.details.items %}{{ k }}={{ v }}{% if not forloop.last %}, {% endif %}{% endfor %}</td>
+      </tr>
+      {% empty %}<tr><td colspan="7" class="empty">No audit entries.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "partials/pager.html" %}
+</div>
+{% endblock %}

@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% load ui %}
+{% block title %}Users{% endblock %}
+{% block page_title %}Users{% endblock %}
+{% block topbar_actions %}<a class="btn btn-primary" href="{% url 'core:user_create' %}">{% icon 'plus' %} <span>Add user</span></a>{% endblock %}
+{% block content %}
+<div class="card glass">
+  <form method="get" class="toolbar"><input type="search" name="q" value="{{ q }}" placeholder="Search by email or name"><button class="btn" type="submit">{% icon 'search' 16 %} Search</button></form>
+  <div class="table-wrap">
+    <table class="tbl responsive">
+      <thead><tr><th>Email</th><th>Name</th><th>Role</th><th>Status</th><th class="num">Transactions</th><th>Last login</th><th></th></tr></thead>
+      <tbody>
+      {% for u in users %}
+      <tr>
+        <td data-label="Email">{{ u.email }}</td>
+        <td data-label="Name">{{ u.full_name|default:"—" }}</td>
+        <td data-label="Role"><span class="badge {% if u.role == 'admin' %}info{% elif u.role == 'reviewer' %}warn{% endif %}">{{ u.get_role_display }}</span></td>
+        <td data-label="Status">{% if u.is_active %}<span class="badge ok">Active</span>{% else %}<span class="badge bad">Deactivated</span>{% endif %}</td>
+        <td data-label="Transactions" class="num">{{ u.n_txn }}</td>
+        <td data-label="Last login">{{ u.last_login|dtshow }}</td>
+        <td data-label=""><div class="row">
+          <a class="btn btn-sm" href="{% url 'core:user_edit' u.pk %}">{% icon 'edit' 14 %} Edit</a>
+          {% if u.pk != user.pk %}
+          <form method="post" action="{% url 'core:user_toggle' u.pk %}">{% csrf_token %}<button class="btn btn-sm {% if u.is_active %}btn-danger{% endif %}" type="submit" data-confirm="{% if u.is_active %}Deactivate{% else %}Activate{% endif %} {{ u.email }}?">{% if u.is_active %}Deactivate{% else %}Activate{% endif %}</button></form>
+          {% endif %}
+        </div></td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

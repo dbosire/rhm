@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% load ui %}
+{% block body %}
+<div class="auth-wrap">
+  <div class="auth-card glass">
+    <div class="brand">
+      <div class="brand-mark">R</div>
+      <div><b>RHM Extractor</b><small>M-Pesa &amp; KCB SMS → Excel</small></div>
+      <button class="icon-btn" style="margin-left:auto" type="button" data-theme-toggle aria-label="Toggle theme">
+        <span class="i-sun hidden">{% icon 'sun' %}</span><span class="i-moon">{% icon 'moon' %}</span>
+      </button>
+    </div>
+    {% block auth %}{% endblock %}
+  </div>
+</div>
+{% endblock %}

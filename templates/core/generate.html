@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% load ui %}
+{% block title %}Generate Excel{% endblock %}
+{% block page_title %}Generate Excel report{% endblock %}
+{% block content %}
+{% if not txns %}
+<div class="card glass">
+  <div class="empty">{% icon 'sheet' 42 %}
+    <h2>No transactions selected</h2>
+    <p>Select records on the <a href="{% url 'core:transaction_list' %}">Transactions</a> page or in a <a href="{% url 'core:batch_list' %}">batch</a>, then choose <b>Generate Excel</b>.</p>
+  </div>
+</div>
+{% else %}
+<form method="post" id="generate-form" data-loading="Generating Excel workbook…">{% csrf_token %}
+<div class="grid grid-main">
+  <div class="card glass">
+    {% include "partials/form_errors.html" %}
+    <div class="field">
+      <label>Output</label>
+      <div class="segmented">
+        {% for radio in form.mode %}
+          <input type="radio" name="mode" id="mode-{{ radio.data.value }}" value="{{ radio.data.value }}" {% if radio.data.selected %}checked{% endif %}>
+          <label for="mode-{{ radio.data.value }}">{% if radio.data.value == 'new' %}{% icon 'plus' 16 %}{% else %}{% icon 'map' 16 %}{% endif %} {{ radio.choice_label }}</label>
+        {% endfor %}
+      </div>
+    </div>
+    {% include "partials/field.html" with field=form.report_name %}
+
+    <div data-mode="new">
+      <div class="grid grid-2" style="gap:0 14px">
+        <div class="field"><label for="id_sheet_name">Worksheet name</label>{{ form.sheet_name }}{{ form.sheet_name.errors }}</div>
+        <div class="field" style="align-self:end"><label class="check">{{ form.include_total }} Add a total row</label></div>
+      </div>
+      <div class="alert info">{% icon 'sheet' %}<div>Columns in this exact order: <b>User Email, Report Type, Item Name, Quantity, Unit Cost, Amount, Status, Reference, MPESA Receipt, Submission Date, Account Number, Bank, Channel</b>. Header filters, frozen header row, auto-width columns and consistent money/date formats are applied.</div></div>
+    </div>
+
+    <div data-mode="template" class="hidden">
+      {% if templates %}
+      <div class="grid grid-2" style="gap:0 14px">
+        <div class="field"><label for="id_template">Template</label>
+          <select name="template" id="id_template" data-info-url="{% url 'core:template_info' 0 %}">
+            <option value="">— Select a template —</option>
+            {% for t in templates %}<option value="{{ t.pk }}" {% if form.template.value|stringformat:'s' == t.pk|stringformat:'s' %}selected{% endif %}>{{ t.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="field"><label for="id_template_sheet">Worksheet</label><select name="template_sheet" id="id_template_sheet"></select></div>
+        <div class="field"><label for="id_mapping">Column mapping</label><select name="mapping" id="id_mapping"><option value="">Auto-map by column headers</option></select></div>
+        <div class="field"><label for="id_header_row">Header row (auto-map only)</label><input type="number" min="1" name="header_row" id="id_header_row" value="{{ form.header_row.value|default:'' }}"></div>
+        <div class="field"><label for="id_data_start_row">First data row (auto-map only)</label><input type="number" min="2" name="data_start_row" id="id_data_start_row" value="{{ form.data_start_row.value|default:'' }}"><span class="help">Leave blank: new rows are appended after existing data (above any “Total” row, whose formula is extended).</span></div>
+      </div>
+      <div id="tpl-info" class="row" style="gap:6px"></div>
+      <p style="margin-top:12px"><a id="mapping-link" data-base="{% url 'core:template_mapping' 0 %}" href="{% url 'core:template_list' %}">{% icon 'map' 15 %} Create or edit a column mapping</a></p>
+      <div class="alert info">{% icon 'shield' %}<div>Your template is never modified – a new copy is generated with existing data, formatting, formulas, sheet names and column widths preserved.</div></div>
+      {% else %}
+      <div class="alert warn">{% icon 'alert' %}<div>No templates yet. <a href="{% url 'core:template_list' %}">Upload an Excel template</a> first.</div></div>
+      {% endif %}
+    </div>
+
+    {% if with_errors or pending_dups %}
+    <div class="field"><label class="check">{{ form.acknowledge }} I've reviewed the validation errors / pending duplicates and want to generate anyway</label>{{ form.acknowledge.errors }}</div>
+    {% endif %}
+    <div class="row end"><button class="btn btn-primary" type="submit">{% icon 'sheet' %} Generate workbook</button></div>
+  </div>
+
+  <div>
+    <div class="card glass">
+      <h2>Selection</h2>
+      <dl class="kv">
+        <dt>Selected</dt><dd>{{ txns|length }} record{{ txns|length|pluralize }}</dd>
+        <dt>Included</dt><dd><b>{{ eligible_count }}</b></dd>
+        <dt>Excluded</dt><dd>{{ excluded_count }} <span class="subtle">(skipped duplicates / rejected)</span></dd>
+        <dt>Total amount</dt><dd><b>KES {{ total|money }}</b></dd>
+      </dl>
+    </div>
+    <div class="card glass">
+      <h2>Validation</h2>
+      {% if not with_errors and not warnings and not pending_dups %}
+        <div class="alert ok">{% icon 'check' %} All records passed validation.</div>
+      {% endif %}
+      {% if with_errors %}<div class="alert bad">{% icon 'x' %}<div><b>{{ with_errors|length }}</b> record(s) with errors:<ul class="issues">{% for t in with_errors|slice:":8" %}<li><a href="{% url 'core:transaction_detail' t.pk %}">#{{ t.pk }}</a>&nbsp;{% for i in t.issues %}{% if i.level == 'error' %}{{ i.message }} {% endif %}{% endfor %}</li>{% endfor %}</ul></div></div>{% endif %}
+      {% if pending_dups %}<div class="alert warn">{% icon 'copy' %}<div><b>{{ pending_dups.count }}</b> duplicate(s) awaiting a retain/skip decision. They will be included unless skipped.</div></div>{% endif %}
+      {% if warnings %}<div class="alert warn">{% icon 'alert' %}<div><b>{{ warnings|length }}</b> record(s) with warnings (e.g. Amount ≠ Quantity × Unit Cost).</div></div>{% endif %}
+    </div>
+  </div>
+</div>
+</form>
+{% endif %}
+{% endblock %}

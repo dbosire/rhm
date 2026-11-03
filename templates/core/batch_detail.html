@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% load ui %}
+{% block title %}Batch {{ batch.short_uid }}{% endblock %}
+{% block page_title %}Review batch <span class="mono">{{ batch.short_uid }}</span>{% endblock %}
+{% block topbar_actions %}{% if batch.extracted_count %}<a class="btn btn-primary" href="{% url 'core:batch_generate' batch.uid %}">{% icon 'sheet' %} <span>Excel for whole batch</span></a>{% endif %}{% endblock %}
+{% block content %}
+<div class="grid grid-4">
+  <div class="stat glass"><div class="label"><span class="stat-ico c-indigo">{% icon 'message' 16 %}</span>Submitted</div><div class="value">{{ batch.submitted_count }}</div><div class="foot">{{ batch.get_input_method_display }}{% if batch.filename %} · {{ batch.filename }}{% endif %}</div></div>
+  <div class="stat glass"><div class="label"><span class="stat-ico c-green">{% icon 'check' 16 %}</span>Extracted</div><div class="value">{{ batch.extracted_count }}</div><div class="foot">{{ batch.created_at|dtshow }}</div></div>
+  <div class="stat glass"><div class="label"><span class="stat-ico c-rose">{% icon 'x' 16 %}</span>Failed</div><div class="value">{{ batch.failed_count }}</div><div class="foot">{% if batch.failed_count %}<a href="#failed">Review &amp; retry</a>{% else %}None{% endif %}</div></div>
+  <div class="stat glass"><div class="label"><span class="stat-ico c-amber">{% icon 'copy' 16 %}</span>Duplicates</div><div class="value">{{ batch.duplicate_count }}</div><div class="foot">{{ summary.dups }} pending decision · {{ summary.errors }} need review</div></div>
+</div>
+
+<form method="post" action="{% url 'core:transaction_bulk' %}" class="card glass" data-select-scope style="margin-top:18px">{% csrf_token %}
+  <input type="hidden" name="next" value="{{ request.get_full_path }}">
+  <div class="card-head">
+    <h2>Extracted transactions</h2>
+    <div class="tabs mb-0">
+      <a href="?show=all" class="{% if show == 'all' %}active{% endif %}">All</a>
+      <a href="?show=review" class="{% if show == 'review' %}active{% endif %}">Needs review</a>
+      <a href="?show=duplicates" class="{% if show == 'duplicates' %}active{% endif %}">Duplicates</a>
+    </div>
+  </div>
+  <p class="subtle">Edit any value directly in the grid, then <b>Save changes</b>. Highlighted cells have warnings; hover a row's flags for details.</p>
+  <div class="table-wrap" style="max-height:68vh">
+    <table class="tbl">
+      <thead><tr>
+        <th class="sel"><input type="checkbox" data-select-all aria-label="Select all"></th>
+        <th>#</th><th>Source</th><th>Amount</th><th>Qty</th><th>Unit cost</th><th>Reference</th><th>MPESA Receipt</th>
+        <th>Submission date</th><th>Account</th><th>Bank</th><th>Channel</th><th>Report type</th><th>Item name</th><th>Status</th><th>Flags</th>
+      </tr></thead>
+      <tbody>
+      {% for t in txns %}
+      {% with bad=t.issues|issue_fields %}
+      <tr data-txn="{{ t.pk }}" class="{% if t.is_duplicate %}is-dup{% endif %} {% if t.error_count %}has-error{% endif %} {% if t.duplicate_decision == 'skip' or t.workflow == 'rejected' %}skipped{% endif %}">
+        <td class="sel"><input type="checkbox" name="ids" value="{{ t.pk }}" data-row-select aria-label="Select row"><input type="hidden" name="row_ids" value="{{ t.pk }}"></td>
+        <td class="subtle">{{ t.sms.position|default:forloop.counter }}</td>
+        <td><span class="badge {% if t.source == 'MPESA' %}mpesa{% elif t.source == 'KCB' %}kcb{% endif %}">{{ t.get_source_display }}</span></td>
+        <td><input class="w-m {% if 'amount' in bad %}flag{% endif %}" data-f="amount" name="f-{{ t.pk }}-amount" value="{{ t.amount|num }}" inputmode="decimal"></td>
+        <td><input class="w-s" data-f="quantity" name="f-{{ t.pk }}-quantity" value="{{ t.quantity|num }}" inputmode="decimal"></td>
+        <td><input class="w-s" data-f="unit_cost" name="f-{{ t.pk }}-unit_cost" value="{{ t.unit_cost|num }}" inputmode="decimal"></td>
+        <td><input class="w-l {% if 'reference' in bad %}flag{% endif %}" name="f-{{ t.pk }}-reference" value="{{ t.reference }}"></td>
+        <td><input class="w-m mono" name="f-{{ t.pk }}-mpesa_receipt" value="{{ t.mpesa_receipt }}"></td>
+        <td><input type="datetime-local" class="{% if 'submission_date' in bad %}flag{% endif %}" name="f-{{ t.pk }}-submission_date" value="{{ t.submission_date|dtlocal }}"></td>
+        <td><input class="w-m mono" name="f-{{ t.pk }}-account_number" value="{{ t.account_number }}"></td>
+        <td><input class="w-s {% if 'bank' in bad %}flag{% endif %}" name="f-{{ t.pk }}-bank" value="{{ t.bank }}"></td>
+        <td><input class="w-m {% if 'channel' in bad %}flag{% endif %}" name="f-{{ t.pk }}-channel" value="{{ t.channel }}"></td>
+        <td><input class="w-m" name="f-{{ t.pk }}-report_type" value="{{ t.report_type }}" list="dl-rt"></td>
+        <td><input class="w-m" name="f-{{ t.pk }}-item_name" value="{{ t.item_name }}" list="dl-items"></td>
+        <td><input class="w-m" name="f-{{ t.pk }}-status" value="{{ t.status }}" list="dl-status"></td>
+        <td style="min-width:260px">
+          <div class="row" style="gap:6px">
+            <span class="badge {{ t.workflow|workflow_class }}">{{ t.get_workflow_display }}</span>
+            {% if t.is_duplicate %}<span class="badge warn" title="Duplicate of #{{ t.duplicate_of_id }}">{% icon 'copy' 12 %} Duplicate{% if t.duplicate_decision == 'keep' %} · retained{% elif t.duplicate_decision == 'skip' %} · skipped{% endif %}</span>{% endif %}
+            <a class="btn btn-sm" href="{% url 'core:transaction_detail' t.pk %}?next={{ request.get_full_path|urlencode }}" title="Open record">{% icon 'edit' 14 %}</a>
+          </div>
+          {% if t.issues %}<ul class="issues">{% for i in t.issues %}{% if i.level != 'info' %}<li class="{{ i.level }}">• {{ i.message }}</li>{% endif %}{% endfor %}</ul>{% endif %}
+          {% if t.sms %}<details class="sms"><summary>Original SMS</summary><div class="sms-text">{{ t.sms.raw_text }}</div></details>{% endif %}
+        </td>
+      </tr>
+      {% endwith %}
+      {% empty %}
+      <tr><td colspan="16"><div class="empty">{% icon 'list' 42 %}<div>No transactions in this view.</div></div></td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <datalist id="dl-rt">{% for o in report_type_options %}<option value="{{ o }}">{% endfor %}</datalist>
+  <datalist id="dl-items">{% for o in item_name_options %}<option value="{{ o }}">{% endfor %}</datalist>
+  <datalist id="dl-status">{% for o in status_options %}<option value="{{ o }}">{% endfor %}</datalist>
+
+  <div class="sticky-actions glass">
+    <span class="sel-count"><span data-sel-count>0</span> selected</span>
+    <span class="spacer"></span>
+    <button class="btn" name="action" value="save" type="submit">{% icon 'check' 16 %} Save changes</button>
+    <button class="btn" name="action" value="keep_dup" type="submit">Retain duplicates</button>
+    <button class="btn" name="action" value="skip_dup" type="submit">Skip duplicates</button>
+    {% if user.can_review %}
+    <button class="btn btn-success" name="action" value="approve" type="submit">Approve</button>
+    <button class="btn" name="action" value="reject" type="submit">Reject</button>
+    {% endif %}
+    <button class="btn btn-danger" name="action" value="delete" type="submit" data-confirm="Remove the selected records? This cannot be undone.">{% icon 'trash' 16 %} Remove</button>
+    <button class="btn btn-primary" name="action" value="generate" type="submit">{% icon 'sheet' 16 %} Generate Excel</button>
+  </div>
+</form>
+
+{% if failed %}
+<div class="card glass" id="failed" style="margin-top:18px">
+  <div class="card-head">
+    <h2>{% icon 'alert' %} Messages that could not be processed ({{ failed|length }})</h2>
+    <form method="post" action="{% url 'core:batch_retry' batch.uid %}" class="row" data-loading="Retrying failed messages…">{% csrf_token %}
+      <select name="source" style="width:auto"><option value="">Same institution</option><option value="AUTO">Auto-detect</option><option value="MPESA">Force M-Pesa</option><option value="KCB">Force KCB</option></select>
+      <button class="btn" type="submit">{% icon 'refresh' 16 %} Retry all</button>
+    </form>
+  </div>
+  <p class="subtle">Correct the text or choose the institution, then retry. Unavailable values are left blank rather than guessed.</p>
+  <div class="stack">
+  {% for s in failed %}
+    <form method="post" action="{% url 'core:sms_retry' s.pk %}" class="glass" style="padding:14px;border-radius:14px">{% csrf_token %}
+      <div class="row between"><b>Message #{{ s.position }}</b><span class="badge bad">{{ s.get_parse_status_display }} · attempt {{ s.attempts }}</span></div>
+      <p class="subtle" style="margin:6px 0">{{ s.error }}</p>
+      <textarea name="raw_text" rows="3">{{ s.raw_text }}</textarea>
+      <div class="row" style="margin-top:8px">
+        <select name="source" style="width:auto">
+          <option value="AUTO" {% if s.selected_source == 'AUTO' %}selected{% endif %}>Auto-detect</option>
+          <option value="MPESA" {% if s.selected_source == 'MPESA' %}selected{% endif %}>M-Pesa</option>
+          <option value="KCB" {% if s.selected_source == 'KCB' %}selected{% endif %}>KCB</option>
+        </select>
+        <button class="btn btn-primary btn-sm" type="submit">{% icon 'refresh' 15 %} Retry extraction</button>
+      </div>
+    </form>
+  {% endfor %}
+  </div>
+</div>
+{% endif %}
+{% endblock %}
