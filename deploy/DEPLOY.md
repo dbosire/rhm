@@ -128,4 +128,5 @@ If you change Nginx rate-limit zones, use `sudo systemctl restart nginx` (a relo
 | Cannot sign in over plain HTTP | `HTTPS_ENABLED=False` is required for HTTP-only installs (option C sets it) |
 | Dashboard chart empty / DB error on MySQL | load MySQL time-zone tables (see step 3) |
 | 429 Too Many Requests | sign-in/download rate limit hit – wait a minute |
+| `ERROR 1819 … password does not satisfy the current policy` | fixed in the installer (sets `validate_password.policy=LOW`, generates compliant passwords) – `git pull` and re-run |
 | RHEL: 502 with SELinux | `sudo setsebool -P httpd_can_network_connect 1` |

@@ -41,6 +41,14 @@ c_info() { printf '\033[1;36m==> %s\033[0m\n' "$*"; }
 c_warn() { printf '\033[1;33m!!  %s\033[0m\n' "$*"; }
 die()    { printf '\033[1;31mxx  %s\033[0m\n' "$*" >&2; exit 1; }
 rand()   { python3 -c "import secrets,string as s; print(''.join(secrets.choice(s.ascii_letters+s.digits) for _ in range(${1:-40})))"; }
+# DB password: always contains upper, lower, digit and a symbol (-_.) so it passes
+# MySQL's validate_password policy, and is still safe in env files, my.cnf and SQL.
+dbpass() { python3 -c "
+import secrets, string as s
+pools = [s.ascii_uppercase, s.ascii_lowercase, s.digits, '-_.']
+chars = [secrets.choice(p) for p in pools] + [secrets.choice(''.join(pools)) for _ in range(${1:-32} - 4)]
+secrets.SystemRandom().shuffle(chars)
+print(''.join(chars))"; }
 envget() { [ -f "$ENV_FILE" ] && grep -E "^$1=" "$ENV_FILE" | tail -1 | cut -d= -f2- || true; }
 
 [ "$(id -u)" -eq 0 ] || die "Run as root (sudo bash deploy/install.sh)."
@@ -128,7 +136,11 @@ DB_PORT="${DB_PORT:-$(envget DB_PORT)}";         DB_PORT="${DB_PORT:-3306}"
 if [ "$DB_MODE" = local ]; then
   c_info "Configuring local MySQL"
   systemctl enable --now mysql 2>/dev/null || systemctl enable --now mariadb 2>/dev/null || systemctl enable --now mysqld
-  DB_PASSWORD="${DB_PASSWORD:-$(rand 32)}"
+  DB_PASSWORD="${DB_PASSWORD:-$(dbpass 32)}"
+  # Relax MySQL's password-validation policy to LOW (length >= 8 only) if the component is active.
+  mysql -uroot -e "SET PERSIST validate_password.policy = LOW; SET PERSIST validate_password.length = 8;" 2>/dev/null \
+    || mysql -uroot -e "SET GLOBAL validate_password_policy = LOW; SET GLOBAL validate_password_length = 8;" 2>/dev/null \
+    || true
   # Time-zone tables are required for date grouping with USE_TZ (dashboard charts)
   if [ "$(mysql -N -uroot -e 'SELECT COUNT(*) FROM mysql.time_zone_name' 2>/dev/null || echo 0)" = "0" ]; then
     (mysql_tzinfo_to_sql /usr/share/zoneinfo 2>/dev/null || mariadb-tzinfo-to-sql /usr/share/zoneinfo 2>/dev/null) \
