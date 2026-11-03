@@ -58,10 +58,12 @@ def extract(request):
 
 @login_required
 def batch_list(request):
-    qs = visible_batches(request.user)
+    qs = visible_batches(request.user).select_related("merged_into")
     state = request.GET.get("state")
     if state:
         qs = qs.filter(state=state)
+    else:
+        qs = qs.exclude(state=ExtractionBatch.State.MERGED)
     page, query = paginate(request, qs)
     return render(request, "core/batch_list.html", {"page": page, "query": query, "states": ExtractionBatch.State.choices, "state": state})
 
@@ -80,8 +82,9 @@ def batch_detail(request, uid):
         errors=Count("id", filter=Q(needs_review=True)),
         dups=Count("id", filter=Q(is_duplicate=True, duplicate_decision="pending")),
     )
+    sources = batch.merged_sources.order_by("created_at")
     return render(request, "core/batch_detail.html", {
-        "batch": batch, "txns": txns, "failed": failed, "show": show, "summary": summary,
+        "batch": batch, "sources": sources, "txns": txns, "failed": failed, "show": show, "summary": summary,
         "workflow_choices": Transaction.Workflow.choices, **option_lists(),
     })
 
@@ -121,3 +124,34 @@ def sms_retry(request, pk):
     else:
         messages.error(request, f"Still could not extract: {sms.error}")
     return redirect("core:batch_detail", uid=sms.batch.uid)
+
+
+@login_required
+@require_POST
+def batch_merge(request):
+    """Merge the selected batches into one; optionally continue straight to Excel generation."""
+    from core.services.batches import MergeError, merge_batches
+
+    uids = request.POST.getlist("uids")
+    batches = list(visible_batches(request.user).filter(uid__in=uids))
+    if len(batches) != len(set(uids)):
+        messages.error(request, "Some selected batches were not found or are not accessible to you.")
+        return redirect("core:batch_list")
+    if len({b.created_by_id for b in batches}) > 1 and not request.user.is_admin_role:
+        messages.error(request, "Only administrators can merge batches that belong to different users.")
+        return redirect("core:batch_list")
+    try:
+        merged = merge_batches(request.user, batches)
+    except MergeError as exc:
+        messages.error(request, str(exc))
+        return redirect("core:batch_list")
+    audit.log(request, "batch.merge", merged, sources=",".join(b.short_uid for b in batches),
+              messages=merged.submitted_count, transactions=merged.extracted_count)
+    messages.success(
+        request,
+        f"Merged {len(batches)} batches into batch {merged.short_uid}: {merged.submitted_count} message(s), "
+        f"{merged.extracted_count} extracted, {merged.duplicate_count} possible duplicate(s).",
+    )
+    if request.POST.get("then") == "generate":
+        return redirect("core:batch_generate", uid=merged.uid)
+    return redirect("core:batch_detail", uid=merged.uid)

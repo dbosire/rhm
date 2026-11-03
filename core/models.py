@@ -139,12 +139,14 @@ class ExtractionBatch(TimeStamped):
         TXT = "txt", "TXT file"
         CSV = "csv", "CSV file"
         XLSX = "xlsx", "Excel file"
+        MERGED = "merged", "Merged batches"
 
     class State(models.TextChoices):
         PROCESSING = "processing", "Processing"
         COMPLETED = "completed", "Completed"
         PARTIAL = "partial", "Completed with errors"
         FAILED = "failed", "Failed"
+        MERGED = "merged", "Merged into another batch"
 
     uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="batches")
@@ -157,6 +159,11 @@ class ExtractionBatch(TimeStamped):
     failed_count = models.PositiveIntegerField(default=0)
     duplicate_count = models.PositiveIntegerField(default=0)
     state = models.CharField(max_length=12, choices=State.choices, default=State.PROCESSING, db_index=True)
+    merged_into = models.ForeignKey(
+        "self", null=True, blank=True, on_delete=models.SET_NULL, related_name="merged_sources",
+        help_text="Set when this batch's messages were moved into a merged batch.",
+    )
+    merged_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ["-created_at"]
@@ -169,7 +176,13 @@ class ExtractionBatch(TimeStamped):
     def short_uid(self):
         return str(self.uid).split("-")[0].upper()
 
+    @property
+    def is_merged(self):
+        return self.state == self.State.MERGED
+
     def refresh_counts(self):
+        if self.is_merged:  # an emptied source batch keeps its historical counts
+            return
         msgs = self.messages.all()
         self.submitted_count = msgs.count()
         self.extracted_count = msgs.filter(parse_status=SMSMessage.ParseStatus.PARSED).count()

@@ -74,6 +74,7 @@
     const update = () => {
       const n = boxes().filter((b) => b.checked).length;
       counter.forEach((c) => (c.textContent = n));
+      $$("[data-min-select]", scope).forEach((b) => (b.disabled = n < parseInt(b.dataset.minSelect, 10)));
       if (all) all.checked = n && n === boxes().length;
     };
     all?.addEventListener("change", () => { boxes().forEach((b) => (b.checked = all.checked)); update(); });

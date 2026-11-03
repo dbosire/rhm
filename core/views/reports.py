@@ -74,6 +74,10 @@ def generate(request):
                     return redirect("core:report_detail", uid=report.uid)
     else:
         default_name = f"Extracted Transactions {timezone.localtime():%Y-%m-%d %H%M}"
+        batch_id = request.session.get("generate_batch")
+        src = visible_batches(request.user).filter(pk=batch_id).first() if batch_id else None
+        if src is not None and src.input_method == src.Method.MERGED:
+            default_name = f"Merged batches {src.short_uid} {timezone.localtime():%Y-%m-%d %H%M}"
         form = GenerateForm(initial={
             "report_name": default_name, "sheet_name": setting.default_sheet_name,
             "include_total": setting.include_total_row, "mode": request.GET.get("mode", "new"),

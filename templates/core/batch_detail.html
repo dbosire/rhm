@@ -2,8 +2,17 @@
 {% load ui %}
 {% block title %}Batch {{ batch.short_uid }}{% endblock %}
 {% block page_title %}Review batch <span class="mono">{{ batch.short_uid }}</span>{% endblock %}
-{% block topbar_actions %}{% if batch.extracted_count %}<a class="btn btn-primary" href="{% url 'core:batch_generate' batch.uid %}">{% icon 'sheet' %} <span>Excel for whole batch</span></a>{% endif %}{% endblock %}
+{% block topbar_actions %}{% if batch.extracted_count and not batch.is_merged %}<a class="btn btn-primary" href="{% url 'core:batch_generate' batch.uid %}">{% icon 'sheet' %} <span>Excel for whole batch</span></a>{% endif %}{% endblock %}
 {% block content %}
+{% if batch.is_merged %}
+<div class="alert info">{% icon 'layers' %}<div>This batch was merged into
+  {% if batch.merged_into %}<a href="{% url 'core:batch_detail' batch.merged_into.uid %}"><b>batch {{ batch.merged_into.short_uid }}</b></a>{% else %}another batch{% endif %}
+  on {{ batch.merged_at|dtshow }}. Its messages and transactions now live there; the counts below are the original figures.</div></div>
+{% endif %}
+{% if sources %}
+<div class="alert info">{% icon 'layers' %}<div>Merged from {{ sources|length }} batches:
+  {% for s in sources %}<a class="mono" href="{% url 'core:batch_detail' s.uid %}">{{ s.short_uid }}</a> <span class="subtle">({{ s.submitted_count }} msg, {{ s.created_at|dtshow }})</span>{% if not forloop.last %} · {% endif %}{% endfor %}</div></div>
+{% endif %}
 <div class="grid grid-4">
   <div class="stat glass"><div class="label"><span class="stat-ico c-indigo">{% icon 'message' 16 %}</span>Submitted</div><div class="value">{{ batch.submitted_count }}</div><div class="foot">{{ batch.get_input_method_display }}{% if batch.filename %} · {{ batch.filename }}{% endif %}</div></div>
   <div class="stat glass"><div class="label"><span class="stat-ico c-green">{% icon 'check' 16 %}</span>Extracted</div><div class="value">{{ batch.extracted_count }}</div><div class="foot">{{ batch.created_at|dtshow }}</div></div>

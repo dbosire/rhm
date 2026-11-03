@@ -10,6 +10,7 @@ urlpatterns = [
     # extraction
     path("extract/", extraction.extract, name="extract"),
     path("batches/", extraction.batch_list, name="batch_list"),
+    path("batches/merge/", extraction.batch_merge, name="batch_merge"),
     path("batches/<uuid:uid>/", extraction.batch_detail, name="batch_detail"),
     path("batches/<uuid:uid>/retry/", extraction.batch_retry, name="batch_retry"),
     path("batches/<uuid:uid>/generate/", reports.generate_from_batch, name="batch_generate"),

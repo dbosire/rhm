@@ -41,6 +41,7 @@ sudo DOMAIN=rhm.example.org LE_EMAIL=you@example.org bash deploy/install.sh
 |---|---|
 | Paste SMS (single or bulk) or upload TXT / CSV / XLSX, choose Auto / M-Pesa / KCB, set defaults (Report Type, Item, Qty, Unit Cost, Status, optional Submission Date) | **Extract SMS** |
 | Review the batch grid: edit any cell, see warnings (missing values, Amount ≠ Qty × Unit Cost, duplicates), retry failed messages with corrected text/institution | **Batches → Review** |
+| Tick several batches → **Merge** (or **Merge & generate Excel**) to combine them into one batch and one report; originals are archived under “Merged” | **Batches** |
 | Select records → **Generate Excel**: new 13-column workbook, or populate a template using a saved/auto column mapping | **Generate Excel** |
 | Download behind the predefined password (server-verified, rate-limited, audited) | **Report History** |
 

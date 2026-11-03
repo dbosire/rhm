@@ -4,37 +4,62 @@
 {% block page_title %}Extraction batches{% endblock %}
 {% block topbar_actions %}<a class="btn btn-primary" href="{% url 'core:extract' %}">{% icon 'plus' %} New</a>{% endblock %}
 {% block content %}
-<div class="card glass">
+<form method="post" action="{% url 'core:batch_merge' %}" class="card glass" data-select-scope data-loading="Merging batches…">{% csrf_token %}
   <div class="tabs">
-    <a href="?" class="{% if not state %}active{% endif %}">All</a>
-    {% for v, l in states %}<a href="?state={{ v }}" class="{% if state == v %}active{% endif %}">{{ l }}</a>{% endfor %}
+    <a href="?" class="{% if not state %}active{% endif %}">Active</a>
+    {% for v, l in states %}<a href="?state={{ v }}" class="{% if state == v %}active{% endif %}">{% if v == 'merged' %}Merged (archived){% else %}{{ l }}{% endif %}</a>{% endfor %}
   </div>
+  {% if state != 'merged' %}
+  <p class="subtle">Tick two or more batches to <b>merge</b> them into a single batch – then review once and generate one Excel report for all of them. Original batches are kept as an archive under “Merged”.</p>
+  {% endif %}
   <div class="table-wrap">
     <table class="tbl responsive">
-      <thead><tr><th>Batch ID</th><th>Created</th><th>By</th><th>Input</th><th class="num">Submitted</th><th class="num">Extracted</th><th class="num">Failed</th><th class="num">Duplicates</th><th>State</th><th></th></tr></thead>
+      <thead><tr>
+        <th class="sel">{% if state != 'merged' %}<input type="checkbox" data-select-all aria-label="Select all">{% endif %}</th>
+        <th>Batch ID</th><th>Created</th><th>By</th><th>Input</th><th class="num">Submitted</th><th class="num">Extracted</th><th class="num">Failed</th><th class="num">Duplicates</th><th>State</th><th></th>
+      </tr></thead>
       <tbody>
       {% for b in page %}
-      <tr>
+      <tr class="{% if b.is_merged %}skipped{% endif %}">
+        <td class="sel">{% if not b.is_merged and b.state != 'processing' %}<input type="checkbox" name="uids" value="{{ b.uid }}" data-row-select aria-label="Select batch {{ b.short_uid }}">{% endif %}</td>
         <td data-label="Batch" class="mono"><a href="{% url 'core:batch_detail' b.uid %}" title="{{ b.uid }}">{{ b.short_uid }}</a></td>
         <td data-label="Created" class="nowrap">{{ b.created_at|dtshow }}</td>
         <td data-label="By">{{ b.created_by.email }}</td>
-        <td data-label="Input">{{ b.get_input_method_display }}{% if b.filename %}<div class="subtle">{{ b.filename|truncatechars:28 }}</div>{% endif %}</td>
+        <td data-label="Input">{% if b.input_method == 'merged' %}<span class="badge info">{% icon 'layers' 12 %} Merged</span>{% else %}{{ b.get_input_method_display }}{% endif %}{% if b.filename %}<div class="subtle">{{ b.filename|truncatechars:34 }}</div>{% endif %}</td>
         <td data-label="Submitted" class="num">{{ b.submitted_count }}</td>
         <td data-label="Extracted" class="num">{{ b.extracted_count }}</td>
         <td data-label="Failed" class="num">{% if b.failed_count %}<span class="badge bad">{{ b.failed_count }}</span>{% else %}0{% endif %}</td>
         <td data-label="Duplicates" class="num">{% if b.duplicate_count %}<span class="badge warn">{{ b.duplicate_count }}</span>{% else %}0{% endif %}</td>
-        <td data-label="State"><span class="badge {% if b.state == 'completed' %}ok{% elif b.state == 'failed' %}bad{% else %}warn{% endif %}">{{ b.get_state_display }}</span></td>
+        <td data-label="State">
+          {% if b.is_merged %}<span class="badge muted">Merged → {% if b.merged_into %}<a href="{% url 'core:batch_detail' b.merged_into.uid %}">{{ b.merged_into.short_uid }}</a>{% endif %}</span>
+          {% else %}<span class="badge {% if b.state == 'completed' %}ok{% elif b.state == 'failed' %}bad{% else %}warn{% endif %}">{{ b.get_state_display }}</span>{% endif %}
+        </td>
         <td data-label=""><div class="row">
-          <a class="btn btn-sm" href="{% url 'core:batch_detail' b.uid %}">{% icon 'eye' 15 %} Review</a>
-          {% if b.extracted_count %}<a class="btn btn-sm" href="{% url 'core:batch_generate' b.uid %}">{% icon 'sheet' 15 %} Excel</a>{% endif %}
+          {% if b.is_merged %}
+            {% if b.merged_into %}<a class="btn btn-sm" href="{% url 'core:batch_detail' b.merged_into.uid %}">{% icon 'eye' 15 %} Open merged</a>{% endif %}
+          {% else %}
+            <a class="btn btn-sm" href="{% url 'core:batch_detail' b.uid %}">{% icon 'eye' 15 %} Review</a>
+            {% if b.extracted_count %}<a class="btn btn-sm" href="{% url 'core:batch_generate' b.uid %}">{% icon 'sheet' 15 %} Excel</a>{% endif %}
+          {% endif %}
         </div></td>
       </tr>
       {% empty %}
-      <tr><td colspan="10"><div class="empty">{% icon 'layers' 42 %}<div>No batches yet.</div></div></td></tr>
+      <tr><td colspan="11"><div class="empty">{% icon 'layers' 42 %}<div>No batches here.</div></div></td></tr>
       {% endfor %}
       </tbody>
     </table>
   </div>
   {% include "partials/pager.html" %}
-</div>
+  {% if state != 'merged' %}
+  <div class="sticky-actions glass">
+    <span class="sel-count"><span data-sel-count>0</span> selected</span>
+    <span class="subtle">Select at least 2 batches</span>
+    <span class="spacer"></span>
+    <button class="btn" type="submit" name="then" value="review" data-min-select="2"
+            data-confirm="Merge the selected batches into one? The originals will be archived under “Merged”.">{% icon 'layers' 16 %} Merge</button>
+    <button class="btn btn-primary" type="submit" name="then" value="generate" data-min-select="2"
+            data-confirm="Merge the selected batches and generate one Excel report?">{% icon 'sheet' 16 %} Merge &amp; generate Excel</button>
+  </div>
+  {% endif %}
+</form>
 {% endblock %}

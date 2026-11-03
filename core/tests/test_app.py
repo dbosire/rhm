@@ -163,3 +163,75 @@ class AppTests(TestCase):
     def test_login_with_email(self):
         r = self.client.post(reverse("accounts:login"), {"username": "ONE@rhm.test", "password": "S3cure-pass!"})
         self.assertEqual(r.status_code, 302)
+
+
+class BatchMergeTests(TestCase):
+    def setUp(self):
+        self.admin = User.objects.create_superuser("admin@rhm.test", "S3cure-pass!")
+        self.u1 = User.objects.create_user("one@rhm.test", "S3cure-pass!")
+        self.u2 = User.objects.create_user("two@rhm.test", "S3cure-pass!")
+        s = AppSetting.load()
+        s.set_download_password("Download#2026")
+        s.save()
+
+    def test_merge_moves_everything_and_archives_sources(self):
+        b1 = ingest.run_batch(self.u1, [MPESA_PAYBILL, "not a transaction message at all here"])
+        b2 = ingest.run_batch(self.u1, [KCB_CREDIT, MPESA_PAYBILL])  # contains a duplicate of b1
+        self.client.force_login(self.u1)
+        r = self.client.post(reverse("core:batch_merge"), {"uids": [b1.uid, b2.uid], "then": "review"})
+        merged = __import__("core.models", fromlist=["x"]).ExtractionBatch.objects.get(input_method="merged")
+        self.assertRedirects(r, reverse("core:batch_detail", args=[merged.uid]))
+        self.assertEqual((merged.submitted_count, merged.extracted_count, merged.failed_count, merged.duplicate_count), (4, 3, 1, 1))
+        self.assertEqual(merged.created_by, self.u1)
+        self.assertEqual(list(merged.messages.order_by("position").values_list("position", flat=True)), [1, 2, 3, 4])
+        for b in (b1, b2):
+            b.refresh_from_db()
+            self.assertEqual(b.state, "merged")
+            self.assertEqual(b.merged_into, merged)
+            self.assertEqual(b.messages.count(), 0)
+        self.assertEqual(b1.submitted_count, 2)  # historical counts kept
+        # archived batches hidden from the default list, visible under the Merged tab
+        src_link = f'value="{b1.uid}"'
+        self.assertNotContains(self.client.get(reverse("core:batch_list")), reverse("core:batch_detail", args=[b1.uid]))
+        self.assertContains(self.client.get(reverse("core:batch_list") + "?state=merged"), reverse("core:batch_detail", args=[b1.uid]))
+        self.assertNotContains(self.client.get(reverse("core:batch_list") + "?state=merged"), src_link)  # archived: not selectable
+        self.assertContains(self.client.get(reverse("core:batch_detail", args=[b1.uid])), "was merged into")
+        self.assertTrue(AuditLog.objects.filter(action="batch.merge").exists())
+
+    def test_merge_then_generate_and_download(self):
+        b1 = ingest.run_batch(self.u1, [MPESA_PAYBILL])
+        b2 = ingest.run_batch(self.u1, [KCB_CREDIT, KCB_DEBIT])
+        self.client.force_login(self.u1)
+        r = self.client.post(reverse("core:batch_merge"), {"uids": [b1.uid, b2.uid], "then": "generate"}, follow=True)
+        self.assertEqual(r.redirect_chain[-1][0], reverse("core:generate"))
+        self.assertContains(r, "Merged batches")
+        r = self.client.post(reverse("core:generate"), {"mode": "new", "report_name": "All", "sheet_name": "Data", "include_total": "on", "acknowledge": "on"})
+        report = GeneratedReport.objects.get()
+        self.assertEqual(report.record_count, 3)
+        r = self.client.post(reverse("core:report_download", args=[report.uid]), {"password": "Download#2026"})
+        self.assertEqual(r.status_code, 200)
+        ws = openpyxl.load_workbook(io.BytesIO(b"".join(r.streaming_content)))["Data"]
+        self.assertEqual(ws.max_row, 1 + 3 + 1)  # header + 3 rows + total
+
+    def test_merge_rules(self):
+        b1 = ingest.run_batch(self.u1, [MPESA_PAYBILL])
+        b2 = ingest.run_batch(self.u2, [KCB_CREDIT])
+        # standard user cannot touch someone else's batch
+        self.client.force_login(self.u1)
+        self.client.post(reverse("core:batch_merge"), {"uids": [b1.uid, b2.uid]})
+        b1.refresh_from_db()
+        self.assertNotEqual(b1.state, "merged")
+        # single batch is refused
+        r = self.client.post(reverse("core:batch_merge"), {"uids": [b1.uid]}, follow=True)
+        self.assertContains(r, "at least two batches")
+        # admin may merge across users; transactions keep their owners
+        self.client.force_login(self.admin)
+        self.client.post(reverse("core:batch_merge"), {"uids": [b1.uid, b2.uid]})
+        b1.refresh_from_db()
+        self.assertEqual(b1.state, "merged")
+        self.assertEqual(b1.merged_into.created_by, self.admin)
+        self.assertEqual(set(Transaction.objects.values_list("created_by__email", flat=True)), {"one@rhm.test", "two@rhm.test"})
+        # already-merged batches cannot be merged again
+        b3 = ingest.run_batch(self.admin, [KCB_DEBIT])
+        r = self.client.post(reverse("core:batch_merge"), {"uids": [b1.uid, b3.uid]}, follow=True)
+        self.assertContains(r, "Already merged")
